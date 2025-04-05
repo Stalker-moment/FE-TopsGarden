@@ -10,14 +10,14 @@ import { FaSun, FaMoon, FaArrowLeft, FaCheckCircle, FaTimesCircle } from "react-
 const Logo = () => (
   <div className="mx-auto mb-10 h-auto w-96 object-contain">
     <Image
-      src="/images/logo/logo-akti.png"
+      src="/images/logo/logo-removebg-preview.png"
       alt="Logo"
       width={2048}
       height={512}
       className="dark:hidden"
     />
     <Image
-      src="/images/logo/logo-akti.png"
+      src="/images/logo/logo-removebg-preview.png"
       alt="Logo Dark"
       width={2048}
       height={512}
