@@ -11,7 +11,7 @@ import ResetPassword from "@/components/ResetPassword";
 export const metadata: Metadata = {
   title: "Sign In | Dashboard Monitoring Server Tierkun",
   description: "This is the login page for the Dashboard Monitoring Server Tierkun",
-  icons: "/images/logo/akti.png",
+  icons: "/images/logo/sw-removebg-preview.png",
 };
 
 const SignIn: React.FC = () => {

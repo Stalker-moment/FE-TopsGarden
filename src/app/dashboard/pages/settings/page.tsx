@@ -9,7 +9,7 @@ import '@react-pdf-viewer/default-layout/lib/styles/index.css';
 export const metadata: Metadata = {
   title: "Next.js Settings Page | NextAdmin - Next.js Dashboard c",
   description: "This is Next.js Settings page for NextAdmin Dashboard Kit",
-  icons: "/images/logo/akti.png",
+  icons: "/images/logo/sw-removebg-preview.png",
 };
 
 const Settings = () => {

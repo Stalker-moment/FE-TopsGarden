@@ -11,14 +11,14 @@ const HTTPSAPIURL = process.env.NEXT_PUBLIC_HTTPS_API_URL;
 const Logo = () => (
   <div className="mx-auto mb-10 h-auto w-96 object-contain">
     <Image
-      src="/images/logo/logo-akti.png" // Logo untuk mode terang
+      src="/images/logo/sw-removebg-preview.png" // Logo untuk mode terang
       alt="Logo"
       width={2048}
       height={512}
       className="dark:hidden" // Hanya tampil di mode terang
     />
     <Image
-      src="/images/logo/logo-akti.png" // Logo untuk mode gelap
+      src="/images/logo/sw-removebg-preview.png" // Logo untuk mode gelap
       alt="Logo Dark"
       width={2048}
       height={512}

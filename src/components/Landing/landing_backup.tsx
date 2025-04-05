@@ -332,7 +332,7 @@ export default function Landing() {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-8">
           {/* Logo & Nama */}
           <div className="flex items-center space-x-3">
-            <Image src="/images/logo/akti.png" alt="Logo TEFA AKTI" width={40} height={40} />
+            <Image src="/images/logo/sw-removebg-preview.png" alt="Logo Smart Watering" width={40} height={40} />
             <span className={`text-xl font-bold tracking-wide ${textColorClass}`}>TEFA AKTI</span>
           </div>
 

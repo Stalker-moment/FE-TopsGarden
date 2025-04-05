@@ -11,7 +11,7 @@ import Signin from "@/components/Auth/Signin";
 export const metadata: Metadata = {
   title: "Sign In | Dashboard Monitoring Garden",
   description: "This is the login page for the Dashboard Monitoring Garden",
-  icons: "/images/logo/akti.png",
+  icons: "/images/logo/sw-removebg-preview.png",
 };
 
 const SignIn: React.FC = () => {
