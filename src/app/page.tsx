@@ -1,5 +1,11 @@
 import Landing from "@/components/Landing/landing"
 
+export const metadata = {
+  title: "Home | Dashboard Monitoring Garden",
+  description: "This is the home page for the Dashboard Monitoring Garden",
+  icons: "/images/logo/sw-removebg-preview.png",
+};
+
 export default function Home() {
   return (
     <div className="min-h-screen flex flex-col">
