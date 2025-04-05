@@ -22,8 +22,8 @@ const Loader = () => {
       <div className="absolute inset-0 flex items-center justify-center">
         {/* Logo untuk Light Mode */}
         <Image
-          src="/images/logo/akti.png"
-          alt="AKTI"
+          src="/images/logo/sw-removebg-preview.png"
+          alt="sw-removebg-preview"
           width={32}
           height={32}
           className="animate-scale-pulse dark:hidden"
@@ -31,8 +31,8 @@ const Loader = () => {
 
         {/* Logo untuk Dark Mode */}
         <Image
-          src="/images/logo/akti.png"
-          alt="AKTI"
+          src="/images/logo/sw-removebg-preview.png"
+          alt="sw-removebg-preview"
           width={32}
           height={32}
           className="animate-scale-pulse hidden dark:block"

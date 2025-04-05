@@ -9,9 +9,9 @@ import OutLayout from "@/components/Layouts/outLaout";
 import ForgotPassword from "@/components/Auth/forgot-password";
 
 export const metadata: Metadata = {
-  title: "Sign In | Dashboard Monitoring Server Tierkun",
-  description: "This is the login page for the Dashboard Monitoring Server Tierkun",
-  icons: "/images/logo/akti.png",
+  title: "Sign In | Dashboard Monitoring Garden",
+  description: "This is the login page for the Dashboard Monitoring Garden",
+  icons: "/images/logo/sw-removebg-preview.png",
 };
 
 const SignIn: React.FC = () => {

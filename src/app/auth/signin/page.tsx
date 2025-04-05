@@ -9,8 +9,8 @@ import OutLayout from "@/components/Layouts/outLaout";
 import Signin from "@/components/Auth/Signin";
 
 export const metadata: Metadata = {
-  title: "Sign In | Dashboard Monitoring Server Tierkun",
-  description: "This is the login page for the Dashboard Monitoring Server Tierkun",
+  title: "Sign In | Dashboard Monitoring Garden",
+  description: "This is the login page for the Dashboard Monitoring Garden",
   icons: "/images/logo/akti.png",
 };
 
