@@ -19,10 +19,7 @@ import {
 
 import Cookies from "js-cookie";
 import CryptoJS from "crypto-js";
-import { LuFileCog } from "react-icons/lu";
-import { RiPagesLine } from "react-icons/ri";
-import { PiHandDeposit } from "react-icons/pi";
-import { GiBoxUnpacking } from "react-icons/gi";
+import { GiWateringCan } from "react-icons/gi";
 
 const WS_SECRET_KEY = process.env.NEXT_PUBLIC_WS_SECRET_KEY || "";
 
@@ -54,6 +51,12 @@ const menuGroups = [
         label: "Light Control",
         route: "/dashboard/light-control",
         isAdmin: false,
+      },
+      {
+        icon: <GiWateringCan style={{ fontSize: "24px" }} />,
+        label: "Smart Watering",
+        route: "/dashboard/smartwatering",
+        isAdmin: true,
       },
       {
         icon: <MdSettingsSuggest style={{ fontSize: "24px" }} />,

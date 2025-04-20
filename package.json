@@ -15,6 +15,8 @@
     "@react-pdf-viewer/core": "^3.12.0",
     "@react-pdf-viewer/default-layout": "^3.12.0",
     "@react-pdf/renderer": "^4.1.4",
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^8.18.0",
     "@types/formidable": "^3.4.5",
     "@types/react-dnd": "^3.0.2",
     "animejs": "^3.2.2",
@@ -55,7 +57,8 @@
     "slick-carousel": "^1.8.1",
     "snapsave-media-downloader": "^2.1.1",
     "swiper": "^11.2.1",
-    "tailwind-merge": "^2.6.0"
+    "tailwind-merge": "^2.6.0",
+    "three": "^0.160.1"
   },
   "devDependencies": {
     "@tailwindcss/line-clamp": "^0.4.4",
@@ -64,7 +67,7 @@
     "@types/crypto-js": "^4.2.2",
     "@types/js-cookie": "^3.0.6",
     "@types/leaflet": "^1.9.14",
-    "@types/lodash": "^4.17.13",
+    "@types/lodash": "^4.17.16",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
