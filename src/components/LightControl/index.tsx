@@ -113,7 +113,6 @@ const GardenLightsControl: React.FC<{}> = () => {
   const [wsConnected, setWsConnected] = useState<boolean>(false);
 
   // --- Notifikasi & Logout ---
-  // (Gunakan library notifikasi yang sesungguhnya jika ada, disini console log saja)
   const showNotification = (message: string, type: "success" | "error") => {
     console.log(`[${type}] ${message}`);
     if (type === 'error') { 
@@ -180,6 +179,7 @@ const GardenLightsControl: React.FC<{}> = () => {
       try {
           const token = Cookies.get("userAuth");
           if (!token) throw new Error("No Token");
+          
           await fetch(`${BASE_API_URL}/output/${lightId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -190,8 +190,18 @@ const GardenLightsControl: React.FC<{}> = () => {
                 turnOffTime: light.currentTurnOffTime,
             }),
           });
-      } catch (err) { showNotification("Gagal mengubah status.", "error"); } 
-      finally { setLoadingStates(prev => ({ ...prev, [lightId]: false })); }
+
+          // [FIX] Optimistic Update (Update UI langsung tanpa menunggu WS)
+          setLights(prev => prev.map(l => 
+             l.id === lightId ? { ...l, currentState: newStateBoolean ? 'ON' : 'OFF' } : l
+          ));
+
+      } catch (err) { 
+          showNotification("Gagal mengubah status.", "error"); 
+          // Revert state jika gagal (opsional, tapi bagus untuk UX)
+      } finally { 
+          setLoadingStates(prev => ({ ...prev, [lightId]: false })); 
+      }
   }, [lights, loadingStates]);
 
   const handleEditSettings = (lightId: string) => {
@@ -214,7 +224,9 @@ const GardenLightsControl: React.FC<{}> = () => {
     try {
         const token = Cookies.get("userAuth");
         if (!token) throw new Error("No Token");
-        await fetch(`${BASE_API_URL}/output/${lightId}`, {
+        
+        // Kirim payload ke API
+        const response = await fetch(`${BASE_API_URL}/output/${lightId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({
@@ -224,11 +236,31 @@ const GardenLightsControl: React.FC<{}> = () => {
               turnOffTime: tempSettings.mode === 'AUTO_DATETIME' ? tempSettings.turnOffTime : null,
           }),
         });
+
+        if (!response.ok) throw new Error("Gagal update API");
+
+        // [FIX] Update State Lokal Langsung (Supaya tidak perlu refresh)
+        setLights(prev => prev.map(l => {
+            if (l.id === lightId) {
+                return {
+                    ...l,
+                    currentMode: tempSettings.mode,
+                    currentTurnOnTime: tempSettings.mode === 'AUTO_DATETIME' ? tempSettings.turnOnTime : null,
+                    currentTurnOffTime: tempSettings.mode === 'AUTO_DATETIME' ? tempSettings.turnOffTime : null,
+                };
+            }
+            return l;
+        }));
+
         showNotification("Pengaturan disimpan.", "success");
         setEditingSettingsId(null);
         setTempSettings(null);
-    } catch (err) { showNotification("Gagal menyimpan.", "error"); } 
-    finally { setSettingsLoadingStates(prev => ({ ...prev, [lightId]: false })); }
+
+    } catch (err) { 
+        showNotification("Gagal menyimpan.", "error"); 
+    } finally { 
+        setSettingsLoadingStates(prev => ({ ...prev, [lightId]: false })); 
+    }
   }, [tempSettings, lights, settingsLoadingStates]);
 
 

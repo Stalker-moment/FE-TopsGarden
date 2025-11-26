@@ -45,7 +45,7 @@ const menuGroups = [
     menuItems: [
       { icon: <MdSpaceDashboard size={22} />, label: "Home", route: "/dashboard", isAdmin: false },
       { icon: <FaLightbulb size={20} />, label: "Light Control", route: "/dashboard/light-control", isAdmin: false },
-      { icon: <GiWateringCan size={22} />, label: "Smart Watering", route: "/dashboard/smartwatering", isAdmin: true },
+      // { icon: <GiWateringCan size={22} />, label: "Smart Watering", route: "/dashboard/smartwatering", isAdmin: true },
       { icon: <MdSettingsSuggest size={22} />, label: "Output Setting", route: "/dashboard/output", isAdmin: false },
     ],
   },

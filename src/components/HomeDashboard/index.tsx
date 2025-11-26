@@ -6,7 +6,7 @@ import CryptoJS from 'crypto-js';
 import {
     FaTint, FaThermometerHalf, FaCloudSun, FaArrowLeft,
     FaRegCalendarAlt, FaRegClock, FaInfoCircle, FaLightbulb,
-    FaSun, FaMoon, FaBolt, FaEye, FaLink, FaUnlink, FaExclamationTriangle, FaSpinner, FaLeaf
+    FaSun, FaMoon, FaBolt, FaEye, FaLink, FaUnlink, FaExclamationTriangle, FaSpinner, FaLeaf, FaRedo
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import dynamic from 'next/dynamic';
@@ -79,7 +79,7 @@ const decryptData = (encryptedData: { iv: string; content: string }): DecryptedS
 };
 
 // ============================================================
-// KOMPONEN SENSOR DETAIL (TAMPILAN GRAFIK BESAR)
+// KOMPONEN SENSOR DETAIL
 // ============================================================
 interface SensorDetailViewProps {
     sensorId: string;
@@ -233,23 +233,18 @@ const SensorDetailView: React.FC<SensorDetailViewProps> = ({
 };
 
 // ============================================================
-// KOMPONEN SPARKLINE CHART (UNTUK KARTU MINI)
+// KOMPONEN SPARKLINE CHART
 // ============================================================
 const SparklineChart = ({ data, color, isDarkMode }: { data: HistoricalEntryNumeric[], color: string, isDarkMode: boolean }) => {
-    // Opsi Chart Minimalis
     const options: ApexOptions = {
-        chart: { type: 'line', sparkline: { enabled: true }, animations: { enabled: false } }, // Matikan animasi berat
+        chart: { type: 'line', sparkline: { enabled: true }, animations: { enabled: false } },
         stroke: { curve: 'smooth', width: 2, colors: [color] },
-        fill: { opacity: 0 }, // Line only, no fill
+        fill: { opacity: 0 },
         tooltip: { fixed: { enabled: false }, x: { show: false }, y: { title: { formatter: () => '' } }, marker: { show: false } },
         theme: { mode: isDarkMode ? 'dark' : 'light' }
     };
-
-    // Ambil 10 data terakhir saja agar ringan
     const series = [{ data: data.slice(-10).map(d => d.value) }];
-
-    if (!data || data.length < 2) return null; // Jangan render jika data sedikit
-
+    if (!data || data.length < 2) return null;
     return (
         <div className="absolute bottom-0 left-0 right-0 h-16 opacity-30 pointer-events-none">
              {typeof window !== 'undefined' && (
@@ -263,7 +258,6 @@ const SparklineChart = ({ data, color, isDarkMode }: { data: HistoricalEntryNume
 // KOMPONEN UTAMA (HOME)
 // ============================================================
 const Home: React.FC = () => {
-    // --- State ---
     const [sensorData, setSensorData] = useState<SensorData>({ ph: NaN, temperature: NaN, humidity: NaN, voltage: NaN, ldr: false, updatedAt: "--:--" });
     const [phHistory, setPhHistory] = useState<HistoricalEntryNumeric[]>([]);
     const [tempHistory, setTempHistory] = useState<HistoricalEntryNumeric[]>([]);
@@ -304,7 +298,7 @@ const Home: React.FC = () => {
          if (ws.current) { ws.current.close(); ws.current = null; }
          
          const wsUrl = `wss://${WSS_HOST}/dataSensor?token=${token}`;
-         setError(null); setInitialLoading(true); setWsConnected(false);
+         setInitialLoading(true); setWsConnected(false); setError(null);
          
          try {
              const socket = new WebSocket(wsUrl); ws.current = socket;
@@ -349,116 +343,45 @@ const Home: React.FC = () => {
 
     const getGreeting = () => { const h = currentTime.getHours(); return h < 11 ? "Selamat Pagi" : h < 15 ? "Selamat Siang" : h < 19 ? "Selamat Sore" : "Selamat Malam"; };
 
-    // --- Sensor Card Render Logic ---
     const renderSensorCards = () => {
         const format = (v: number, u: string) => (typeof v === 'number' && isFinite(v)) ? `${v.toFixed(1)}${u}` : '-';
         const sensors = [
-            { 
-                id: "ph", 
-                label: "Air & Daya", 
-                value: format(sensorData.ph, ' pH'), 
-                sub: `${format(sensorData.voltage, 'V')}`, 
-                icon: <FaTint />, 
-                color: "text-blue-500", 
-                hexColor: "#3b82f6", // Needed for sparkline
-                bg: "from-blue-500/10 to-blue-500/5", 
-                border: "group-hover:border-blue-500/50", 
-                clickable: true,
-                history: phHistory // Pass history data
-            },
-            { 
-                id: "temperature", 
-                label: "Suhu Udara", 
-                value: format(sensorData.temperature, '°C'), 
-                sub: "Lingkungan", 
-                icon: <FaThermometerHalf />, 
-                color: "text-red-500", 
-                hexColor: "#ef4444",
-                bg: "from-red-500/10 to-red-500/5", 
-                border: "group-hover:border-red-500/50", 
-                clickable: true,
-                history: tempHistory 
-            },
-            { 
-                id: "humidity", 
-                label: "Kelembaban", 
-                value: format(sensorData.humidity, '%'), 
-                sub: "RH", 
-                icon: <FaCloudSun />, 
-                color: "text-green-500", 
-                hexColor: "#22c55e",
-                bg: "from-green-500/10 to-green-500/5", 
-                border: "group-hover:border-green-500/50", 
-                clickable: true,
-                history: humidityHistory
-            },
-            { 
-                id: "ldr", 
-                label: "Cahaya", 
-                value: sensorData.ldr ? "Gelap" : "Terang", 
-                sub: "Status", 
-                icon: sensorData.ldr ? <FaMoon /> : <FaSun />, 
-                color: sensorData.ldr ? "text-purple-500" : "text-yellow-500", 
-                hexColor: sensorData.ldr ? "#a855f7" : "#eab308",
-                bg: "from-yellow-500/10 to-yellow-500/5", 
-                border: "", 
-                clickable: false,
-                history: [] // No sparkline for boolean
-            },
+            { id: "ph", label: "Air & Daya", value: format(sensorData.ph, ' pH'), sub: `${format(sensorData.voltage, 'V')}`, icon: <FaTint />, color: "text-blue-500", hexColor: "#3b82f6", bg: "from-blue-500/10 to-blue-500/5", border: "group-hover:border-blue-500/50", clickable: true, history: phHistory },
+            { id: "temperature", label: "Suhu Udara", value: format(sensorData.temperature, '°C'), sub: "Lingkungan", icon: <FaThermometerHalf />, color: "text-red-500", hexColor: "#ef4444", bg: "from-red-500/10 to-red-500/5", border: "group-hover:border-red-500/50", clickable: true, history: tempHistory },
+            { id: "humidity", label: "Kelembaban", value: format(sensorData.humidity, '%'), sub: "RH", icon: <FaCloudSun />, color: "text-green-500", hexColor: "#22c55e", bg: "from-green-500/10 to-green-500/5", border: "group-hover:border-green-500/50", clickable: true, history: humidityHistory },
+            { id: "ldr", label: "Cahaya", value: sensorData.ldr ? "Gelap" : "Terang", sub: "Status", icon: sensorData.ldr ? <FaMoon /> : <FaSun />, color: sensorData.ldr ? "text-purple-500" : "text-yellow-500", hexColor: sensorData.ldr ? "#a855f7" : "#eab308", bg: "from-yellow-500/10 to-yellow-500/5", border: "", clickable: false, history: [] },
         ];
-
         return sensors.map((s) => (
-            <motion.div key={s.id} whileHover={s.clickable ? { y: -5 } : {}} whileTap={s.clickable ? { scale: 0.98 } : {}}
-                onClick={() => s.clickable && setSelectedSensor(s.id)}
-                className={`group relative overflow-hidden rounded-[2rem] bg-white/70 dark:bg-gray-800/60 backdrop-blur-xl border border-white/50 dark:border-gray-700/50 p-6 transition-all hover:shadow-2xl ${s.clickable ? 'cursor-pointer' : ''}`}
-            >
-                {/* Background Blur Blob */}
+            <motion.div key={s.id} whileHover={s.clickable ? { y: -5 } : {}} whileTap={s.clickable ? { scale: 0.98 } : {}} onClick={() => s.clickable && setSelectedSensor(s.id)} className={`group relative overflow-hidden rounded-[2rem] bg-white/70 dark:bg-gray-800/60 backdrop-blur-xl border border-white/50 dark:border-gray-700/50 p-6 transition-all hover:shadow-2xl ${s.clickable ? 'cursor-pointer' : ''}`}>
                 <div className={`absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-to-br ${s.bg} blur-2xl transition-all group-hover:scale-150`}></div>
-                
-                {/* Sparkline Chart (New) */}
-                {s.clickable && s.history && s.history.length > 1 && (
-                    <SparklineChart data={s.history} color={s.hexColor} isDarkMode={isDarkMode} />
-                )}
-
+                {s.clickable && s.history && s.history.length > 1 && (<SparklineChart data={s.history} color={s.hexColor} isDarkMode={isDarkMode} />)}
                 <div className="relative z-10 flex flex-col h-full justify-between">
                     <div className="flex justify-between items-start mb-4">
                         <div className={`p-3 rounded-2xl bg-white dark:bg-gray-700 shadow-sm ${s.color} text-2xl`}>{s.icon}</div>
                         {s.clickable && <div className="p-2 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity"><FaEye size={12}/></div>}
                     </div>
-                    <div>
-                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{s.label}</p>
-                        <h4 className="text-3xl font-black text-gray-800 dark:text-gray-100 mt-1 tracking-tight">{s.value}</h4>
-                        <p className="text-xs font-semibold text-gray-400 mt-1">{s.sub}</p>
-                    </div>
+                    <div><p className="text-sm font-medium text-gray-500 dark:text-gray-400">{s.label}</p><h4 className="text-3xl font-black text-gray-800 dark:text-gray-100 mt-1 tracking-tight">{s.value}</h4><p className="text-xs font-semibold text-gray-400 mt-1">{s.sub}</p></div>
                 </div>
             </motion.div>
         ));
     };
 
-    // --- RENDER UTAMA ---
     return (
         <div className="min-h-screen w-full relative text-gray-800 dark:text-gray-100 transition-colors duration-500 overflow-x-hidden">
-            
             <div className="fixed inset-0 z-0 pointer-events-none">
                 <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] bg-green-400/20 rounded-full blur-[120px] opacity-60 dark:opacity-20 animate-pulse"></div>
                 <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-blue-400/20 rounded-full blur-[120px] opacity-60 dark:opacity-20 animate-pulse" style={{animationDelay: '2s'}}></div>
             </div>
 
             <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-                
                 <AnimatePresence mode="wait">
-                    {/* STATE: LOADING */}
                     {initialLoading && (
                         <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center justify-center min-h-[60vh]">
-                            <div className="relative">
-                                <div className="h-16 w-16 rounded-full border-4 border-gray-200 dark:border-gray-700"></div>
-                                <div className="absolute top-0 left-0 h-16 w-16 rounded-full border-4 border-green-500 border-t-transparent animate-spin"></div>
-                            </div>
+                            <div className="relative"><div className="h-16 w-16 rounded-full border-4 border-gray-200 dark:border-gray-700"></div><div className="absolute top-0 left-0 h-16 w-16 rounded-full border-4 border-green-500 border-t-transparent animate-spin"></div></div>
                             <p className="mt-4 text-lg font-medium text-gray-500 animate-pulse">Menghubungkan ke Kebun...</p>
                         </motion.div>
                     )}
 
-                    {/* STATE: ERROR */}
                     {!initialLoading && error && !wsConnected && (
                         <motion.div key="error" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center justify-center min-h-[50vh] text-center">
                             <div className="p-6 rounded-[2rem] bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/50 shadow-xl max-w-md">
@@ -466,84 +389,49 @@ const Home: React.FC = () => {
                                 <h3 className="text-xl font-bold text-red-600 dark:text-red-400 mb-2">Koneksi Terputus</h3>
                                 <p className="text-gray-600 dark:text-gray-300 mb-6">{error}</p>
                                 <button onClick={connectWebSocket} className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold shadow-lg transition-all active:scale-95">
-                                    Coba Lagi
+                                    Coba Sambungkan Lagi
                                 </button>
                             </div>
                         </motion.div>
                     )}
 
-                    {/* STATE: DETAIL VIEW */}
                     {!initialLoading && selectedSensor && (
-                        <SensorDetailView 
-                            key="detail"
-                            sensorId={selectedSensor} 
-                            onBack={() => setSelectedSensor(null)} 
-                            isDarkMode={isDarkMode}
-                            currentValue={sensorData[selectedSensor as keyof SensorData] as number}
-                            historicalData={selectedSensor === 'temperature' ? tempHistory : humidityHistory}
-                            currentPhValue={sensorData.ph}
-                            currentVoltageValue={sensorData.voltage}
-                            phHistoricalData={phHistory}
-                            voltageHistoricalData={voltageHistory}
-                        />
+                        <SensorDetailView key="detail" sensorId={selectedSensor} onBack={() => setSelectedSensor(null)} isDarkMode={isDarkMode} currentValue={sensorData[selectedSensor as keyof SensorData] as number} historicalData={selectedSensor === 'temperature' ? tempHistory : humidityHistory} currentPhValue={sensorData.ph} currentVoltageValue={sensorData.voltage} phHistoricalData={phHistory} voltageHistoricalData={voltageHistory} />
                     )}
 
-                    {/* STATE: DASHBOARD VIEW */}
                     {!initialLoading && !selectedSensor && !error && (
                         <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }}>
-                            
                             <div className="flex flex-col md:flex-row justify-between items-end mb-10 gap-4">
                                 <div>
-                                    <div className="flex items-center gap-2 mb-1 text-green-600 dark:text-green-400 font-bold text-sm uppercase tracking-wider">
-                                        <FaLeaf /> Live Monitoring
-                                    </div>
-                                    <h1 className="text-4xl md:text-5xl font-black text-gray-800 dark:text-white tracking-tight mb-2">
-                                        {getGreeting()}
-                                    </h1>
+                                    <div className="flex items-center gap-2 mb-1 text-green-600 dark:text-green-400 font-bold text-sm uppercase tracking-wider"><FaLeaf /> Live Monitoring</div>
+                                    <h1 className="text-4xl md:text-5xl font-black text-gray-800 dark:text-white tracking-tight mb-2">{getGreeting()}</h1>
                                     <p className="text-gray-500 dark:text-gray-400">Pantau kondisi kebun Anda secara real-time.</p>
                                 </div>
                                 <div className="flex flex-col items-end gap-2">
-                                    <div className={`px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 shadow-sm border ${wsConnected ? 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800' : 'bg-red-100 text-red-700 border-red-200'}`}>
+                                    {/* Status Connection Button */}
+                                    <button onClick={() => !wsConnected && connectWebSocket()} className={`px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 shadow-sm border transition-all active:scale-95 ${wsConnected ? 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800 cursor-default' : 'bg-red-100 text-red-700 border-red-200 hover:bg-red-200 cursor-pointer'}`}>
                                         <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
-                                        {wsConnected ? 'Sistem Online' : 'Terputus'}
-                                    </div>
-                                    <div className="text-xs text-gray-400 font-mono flex items-center gap-2">
-                                        <FaRegClock /> {sensorData.updatedAt !== "--:--" ? `Update: ${sensorData.updatedAt}` : "Menunggu data..."}
-                                    </div>
+                                        {wsConnected ? 'Sistem Online' : 'Terputus (Klik untuk Reconnect)'}
+                                    </button>
+                                    <div className="text-xs text-gray-400 font-mono flex items-center gap-2"><FaRegClock /> {sensorData.updatedAt !== "--:--" ? `Update: ${sensorData.updatedAt}` : "Menunggu data..."}</div>
                                 </div>
                             </div>
-
                             <div className="grid md:grid-cols-2 gap-6 mb-10">
                                 <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-blue-500 to-indigo-600 p-8 shadow-xl text-white">
                                     <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
                                     <div className="relative z-10">
-                                        <div className="flex items-center gap-2 mb-4 opacity-90">
-                                            <FaInfoCircle /> <span className="text-sm font-bold uppercase tracking-wide">Status Kebun</span>
-                                        </div>
-                                        <p className="text-2xl font-bold leading-relaxed">
-                                            {sensorData.ph < 6 ? "Perhatian: pH Rendah." : sensorData.ph > 7 ? "Perhatian: pH Tinggi." : "Semua sistem berjalan normal."}
-                                        </p>
+                                        <div className="flex items-center gap-2 mb-4 opacity-90"><FaInfoCircle /> <span className="text-sm font-bold uppercase tracking-wide">Status Kebun</span></div>
+                                        <p className="text-2xl font-bold leading-relaxed">{sensorData.ph < 6 ? "Perhatian: pH Rendah." : sensorData.ph > 7 ? "Perhatian: pH Tinggi." : "Semua sistem berjalan normal."}</p>
                                         <p className="mt-2 opacity-80 text-sm">Sensor bekerja optimal.</p>
                                     </div>
                                 </div>
-
                                 <div className="relative overflow-hidden rounded-[2rem] bg-white/60 dark:bg-gray-800/60 backdrop-blur-md border border-white/50 dark:border-gray-700 p-8 shadow-lg">
-                                    <div className="flex items-center gap-2 mb-4 text-yellow-600 dark:text-yellow-400">
-                                        <FaLightbulb /> <span className="text-sm font-bold uppercase tracking-wide">Smart Tip</span>
-                                    </div>
-                                    <p className="text-lg font-medium text-gray-700 dark:text-gray-200">
-                                        {sensorData.temperature > 30 ? "Suhu cukup tinggi, pastikan ventilasi cukup." : "Kondisi lingkungan ideal untuk pertumbuhan."}
-                                    </p>
+                                    <div className="flex items-center gap-2 mb-4 text-yellow-600 dark:text-yellow-400"><FaLightbulb /> <span className="text-sm font-bold uppercase tracking-wide">Smart Tip</span></div>
+                                    <p className="text-lg font-medium text-gray-700 dark:text-gray-200">{sensorData.temperature > 30 ? "Suhu cukup tinggi, pastikan ventilasi cukup." : "Kondisi lingkungan ideal untuk pertumbuhan."}</p>
                                 </div>
                             </div>
-
-                            <div className="mb-4 flex items-center justify-between">
-                                <h3 className="text-xl font-bold text-gray-800 dark:text-white">Metrik Sensor</h3>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                                {renderSensorCards()}
-                            </div>
-
+                            <div className="mb-4 flex items-center justify-between"><h3 className="text-xl font-bold text-gray-800 dark:text-white">Metrik Sensor</h3></div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">{renderSensorCards()}</div>
                         </motion.div>
                     )}
                 </AnimatePresence>
