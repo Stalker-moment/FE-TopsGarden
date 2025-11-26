@@ -1,317 +1,270 @@
 "use client";
+
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Cookies from "js-cookie";
 import Image from "next/image";
 import Notification from "../Alerts/notification";
-import { FaSun, FaMoon, FaArrowLeft, FaEye, FaEyeSlash } from "react-icons/fa"; // Tambahkan FaEye dan FaEyeSlash
+import { 
+  FaSun, 
+  FaMoon, 
+  FaArrowLeft, 
+  FaEye, 
+  FaEyeSlash, 
+  FaLeaf 
+} from "react-icons/fa";
 
 const HTTPSAPIURL = process.env.NEXT_PUBLIC_HTTPS_API_URL;
 
-// Komponen Logo Internal
-const Logo = () => (
-  <div className="mx-auto mb-10 h-auto w-96 object-contain">
-    <Image
-      src="/images/logo/logo_Sw.svg" // Logo untuk mode terang
-      alt="Logo"
-      width={2048}
-      height={512}
-      className="dark:hidden" // Hanya tampil di mode terang
-    />
-    <Image
-      src="/images/logo/logo_Sw.svg" // Logo untuk mode gelap
-      alt="Logo Dark"
-      width={2048}
-      height={512}
-      className="hidden dark:block" // Hanya tampil di mode gelap
-    />
+// --- LOADING ANIMATION ---
+const LoadingSpinner = () => (
+  <div className="flex items-center justify-center gap-2">
+    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+    <span>Processing...</span>
   </div>
 );
 
-// Komponen LoadingDots untuk animasi loading button
-const LoadingDots: React.FC = () => {
-  const [dotCount, setDotCount] = useState(0);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDotCount((prev) => (prev + 1) % 4); // 0,1,2,3
-    }, 500);
-    return () => clearInterval(interval);
-  }, []);
-
-  return <span>{"Sign in" + ".".repeat(dotCount)}</span>;
-};
-
 export default function SigninWithPassword() {
+  // --- STATE ---
   const [data, setData] = useState({
     email: "",
     password: "",
     remember: false,
   });
-
-  const [theme, setTheme] = useState("light"); // Default tema
-  const [notification, setNotification] = useState<{
-    message: string;
-    type: "success" | "error";
-  } | null>(null);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  const [showPassword, setShowPassword] = useState(false); // Tambahkan state showPassword
-
-  const showNotification = (message: string, type: "success" | "error") => {
-    setNotification({ message, type });
-  };
-
-  // Saat komponen dimuat, baca tema dari localStorage (dengan tanda kutip)
+  // --- EFFECTS ---
   useEffect(() => {
+    setMounted(true);
+    // Load Theme
     const savedTheme = localStorage.getItem("color-theme");
+    let initialTheme: "light" | "dark" = "light";
+
     if (savedTheme) {
-      // savedTheme berupa string misalnya: "\"dark\"" atau "\"light\""
       try {
-        const parsedTheme = JSON.parse(savedTheme);
-        if (parsedTheme === "dark" || parsedTheme === "light") {
-          setTheme(parsedTheme);
-          if (parsedTheme === "dark") {
-            document.documentElement.classList.add("dark");
-          } else {
-            document.documentElement.classList.remove("dark");
-          }
-        }
-      } catch (error) {
-        console.error("Error parsing theme from localStorage:", error);
+        const parsed = JSON.parse(savedTheme);
+        if (parsed === "dark" || parsed === "light") initialTheme = parsed;
+      } catch {
+        if (savedTheme === "dark") initialTheme = "dark";
       }
-    } else {
-      // Jika tidak ada preferensi yang disimpan, gunakan preferensi sistem
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      if (prefersDark) {
-        setTheme("dark");
-        document.documentElement.classList.add("dark");
-        localStorage.setItem("color-theme", JSON.stringify("dark"));
-      } else {
-        setTheme("light");
-        document.documentElement.classList.remove("dark");
-        localStorage.setItem("color-theme", JSON.stringify("light"));
-      }
+    } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      initialTheme = "dark";
     }
 
-    // Mencegah scrolling pada halaman login
+    setTheme(initialTheme);
+    if (initialTheme === "dark") document.documentElement.classList.add("dark");
+    else document.documentElement.classList.remove("dark");
+
+    // Lock Body Scroll
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = "auto";
     };
   }, []);
 
-  // Handler untuk toggle tema
+  // --- HANDLERS ---
+  const showNotification = (message: string, type: "success" | "error") => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000); // Auto hide
+  };
+
   const toggleTheme = () => {
-    if (theme === "light") {
-      setTheme("dark");
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("color-theme", JSON.stringify("dark"));
-    } else {
-      setTheme("light");
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("color-theme", JSON.stringify("light"));
-    }
+    const newTheme = theme === "light" ? "dark" : "light";
+    setTheme(newTheme);
+    localStorage.setItem("color-theme", JSON.stringify(newTheme));
+    if (newTheme === "dark") document.documentElement.classList.add("dark");
+    else document.documentElement.classList.remove("dark");
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
-    setData({
-      ...data,
-      [name]: type === "checkbox" ? checked : value,
-    });
+    setData({ ...data, [name]: type === "checkbox" ? checked : value });
   };
 
-  interface LoginResponse {
-    token: string;
-    deviceType: string;
-    sessionId: string;
-    expired: number; // timestamp dalam milidetik
-  }
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-
-    // Jika sudah ada cookie userAuth, langsung redirect ke dashboard
-    const userAuthCookie = Cookies.get("userAuth");
-    if (userAuthCookie) {
+    if (Cookies.get("userAuth")) {
       window.location.href = "/dashboard";
       return;
     }
 
     setLoading(true);
     try {
-      // Tambahkan properti "remember" pada body request
       const response = await fetch(`https://${HTTPSAPIURL}/api/users/login`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: data.email,
-          password: data.password,
-          remember: data.remember,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
       });
 
       if (response.ok) {
-        const result: LoginResponse = await response.json();
-        // Ubah timestamp expired menjadi objek Date
-        const expiryDate = new Date(result.expired);
-        Cookies.set("userAuth", result.token, {
-          expires: expiryDate,
-        });
+        const result = await response.json();
+        Cookies.set("userAuth", result.token, { expires: new Date(result.expired) });
         window.location.href = "/dashboard";
       } else {
-        showNotification("Login failed. Please check your credentials.", "error");
+        showNotification("Login failed. Check credentials.", "error");
       }
     } catch (error) {
-      console.error("Error logging in:", error);
-      showNotification("An error occurred during login.", "error");
+      console.error("Login Error:", error);
+      showNotification("An network error occurred.", "error");
     } finally {
       setLoading(false);
     }
   };
 
+  if (!mounted) return null; // Prevent hydration mismatch
+
   return (
-    <div className="fixed inset-0 flex flex-col items-center justify-center overflow-hidden bg-gray-100 dark:bg-gray-900 md:flex-row">
-      {notification && (
-        <Notification
-          message={notification.message}
-          type={notification.type}
-          onClose={() => {
-            console.log("Notification onClose dipanggil");
-            setNotification(null);
-          }}
-        />
-      )}
-      {/* Kolom Kiri: Formulir Login */}
-      <div className="flex w-full items-center justify-center p-6 md:w-1/2">
-        <div className="box-border w-full max-w-md rounded-lg bg-white p-8 shadow-lg dark:bg-gray-800">
-          {/* Header Bar: Back button dan Toggle Theme */}
-          <div className="mb-4 flex justify-between">
-            <Link
-              href="/"
-              className="flex items-center transition-colors duration-300 focus:outline-none"
-            >
-              <FaArrowLeft className="h-6 w-6 text-gray-800 dark:text-gray-200" />
-              <span className="ml-2 text-gray-800 dark:text-gray-200">Back</span>
-            </Link>
-            <button
-              onClick={toggleTheme}
-              className="flex items-center transition-colors duration-300 focus:outline-none text-xl"
-              aria-label="Toggle Dark Mode"
-            >
-              {theme === "light" ? (
-                <FaMoon className="text-gray-800 dark:text-gray-200" />
-              ) : (
-                <FaSun className="text-yellow-400" />
-              )}
-            </button>
-          </div>
-
-          <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-200 mb-2">
-            Login to Your Account
-          </h2>
-          <p className="mb-6 text-gray-600 dark:text-gray-400">
-            Fill in your details to sign in to your account.
-          </p>
-
-          {/* Form Login */}
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Field Email */}
-            <div>
-              <label
-                htmlFor="email"
-                className="mb-2.5 block font-medium text-gray-700 dark:text-gray-200"
-              >
-                Email
-              </label>
-              <input
-                type="email"
-                name="email"
-                value={data.email}
-                onChange={handleChange}
-                placeholder="Enter your email"
-                required
-                className="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-3 text-gray-700 transition-colors duration-300 focus:border-blue-500 focus:ring-0 dark:border-gray-600 dark:text-gray-200"
-              />
-            </div>
-
-            {/* Field Password */}
-            <div>
-              <label
-                htmlFor="password"
-                className="mb-2.5 block font-medium text-gray-700 dark:text-gray-200"
-              >
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"} // Ganti tipe input berdasarkan state
-                  name="password"
-                  value={data.password}
-                  onChange={handleChange}
-                  placeholder="Enter your password"
-                  required
-                  className="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-3 pr-10 text-gray-700 transition-colors duration-300 focus:border-blue-500 focus:ring-0 dark:border-gray-600 dark:text-gray-200"
-                />
-                {/* Tombol untuk toggle password visibility */}
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-gray-400 focus:outline-none"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <FaEyeSlash /> : <FaEye />}
-                </button>
-              </div>
-            </div>
-
-            {/* Baris untuk Remember me dan Forgot Password */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  name="remember"
-                  checked={data.remember}
-                  onChange={handleChange}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600"
-                />
-                <label htmlFor="remember" className="ml-2 text-gray-700 dark:text-gray-200">
-                  Remember me
-                </label>
-              </div>
-              <Link
-                href="/auth/forgot-password"
-                className="text-blue-600 hover:underline dark:text-blue-400"
-              >
-                Forgot Password?
-              </Link>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-lg bg-blue-600 py-3 text-white transition-colors duration-300 hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed"
-            >
-              {loading ? <LoadingDots /> : "Sign In"}
-            </button>
-          </form>
-        </div>
+    <div className="relative min-h-screen w-full overflow-hidden bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 flex items-center justify-center">
+      
+      {/* --- BACKGROUND AMBIENT --- */}
+      <div className="absolute inset-0 z-0 pointer-events-none">
+         <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-green-400/20 rounded-full blur-[120px] opacity-60 dark:opacity-30 animate-pulse"></div>
+         <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] bg-blue-400/20 rounded-full blur-[120px] opacity-60 dark:opacity-30 animate-pulse" style={{animationDelay: '2s'}}></div>
       </div>
 
-      {/* Kolom Kanan: Logo dan Teks Sambutan (hanya untuk tampilan desktop) */}
-      <div className="hidden items-center justify-center p-6 md:flex md:w-1/2">
-        <div className="text-center">
-          <Logo />
-          <h2 className="mb-4 text-3xl font-semibold text-gray-800 dark:text-gray-200">
-            Welcome Back!
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400">
-            Please sign in to your account to continue.
-          </p>
+      {/* --- NOTIFICATION --- */}
+      {notification && (
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-sm px-4">
+           <Notification message={notification.message} type={notification.type} onClose={() => setNotification(null)} />
         </div>
+      )}
+
+      {/* --- MAIN CARD CONTAINER --- */}
+      <div className="relative z-10 w-full max-w-5xl bg-white/70 dark:bg-gray-800/60 backdrop-blur-xl border border-white/50 dark:border-gray-700/50 rounded-3xl shadow-2xl overflow-hidden grid md:grid-cols-2 min-h-[600px]">
+        
+        {/* LEFT COLUMN: FORM */}
+        <div className="p-8 md:p-12 flex flex-col justify-center relative">
+           
+           {/* Header Actions */}
+           <div className="absolute top-6 left-6 md:top-8 md:left-8 flex items-center gap-4">
+              <Link href="/" className="flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 transition-colors group">
+                 <FaArrowLeft className="transition-transform group-hover:-translate-x-1" />
+                 Back
+              </Link>
+           </div>
+           <div className="absolute top-6 right-6 md:top-8 md:right-8">
+              <button onClick={toggleTheme} className="p-2 rounded-full text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 transition-all">
+                 {theme === "light" ? <FaMoon /> : <FaSun className="text-yellow-400" />}
+              </button>
+           </div>
+
+           {/* Form Content */}
+           <div className="mt-12 md:mt-0">
+              <div className="mb-8">
+                 <div className="inline-block p-3 rounded-2xl bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 mb-4">
+                    <FaLeaf size={24} />
+                 </div>
+                 <h2 className="text-3xl font-bold tracking-tight mb-2">Welcome Back!</h2>
+                 <p className="text-gray-500 dark:text-gray-400">Sign in to continue to your garden dashboard.</p>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-5">
+                 
+                 {/* Email Input */}
+                 <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase text-gray-500 dark:text-gray-400 tracking-wider ml-1">Email Address</label>
+                    <input 
+                      type="email" 
+                      name="email" 
+                      value={data.email} 
+                      onChange={handleChange} 
+                      placeholder="name@example.com" 
+                      required 
+                      className="w-full bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-600 rounded-xl px-4 py-3.5 outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500 transition-all"
+                    />
+                 </div>
+
+                 {/* Password Input */}
+                 <div className="space-y-1.5">
+                    <div className="flex justify-between items-center ml-1">
+                       <label className="text-xs font-bold uppercase text-gray-500 dark:text-gray-400 tracking-wider">Password</label>
+                       <Link href="/auth/forgot-password" className="text-xs font-semibold text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300">
+                          Forgot Password?
+                       </Link>
+                    </div>
+                    <div className="relative">
+                       <input 
+                         type={showPassword ? "text" : "password"} 
+                         name="password" 
+                         value={data.password} 
+                         onChange={handleChange} 
+                         placeholder="Enter your password" 
+                         required 
+                         className="w-full bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-600 rounded-xl px-4 py-3.5 pr-12 outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500 transition-all"
+                       />
+                       <button 
+                         type="button" 
+                         onClick={() => setShowPassword(!showPassword)} 
+                         className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                       >
+                          {showPassword ? <FaEyeSlash /> : <FaEye />}
+                       </button>
+                    </div>
+                 </div>
+
+                 {/* Checkbox */}
+                 <div className="flex items-center gap-2 py-2">
+                    <input 
+                      id="remember" 
+                      type="checkbox" 
+                      name="remember" 
+                      checked={data.remember} 
+                      onChange={handleChange} 
+                      className="w-4 h-4 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 dark:focus:ring-green-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                    />
+                    <label htmlFor="remember" className="text-sm font-medium text-gray-600 dark:text-gray-300 select-none cursor-pointer">
+                       Remember me for 30 days
+                    </label>
+                 </div>
+
+                 {/* Submit Button */}
+                 <button 
+                   type="submit" 
+                   disabled={loading} 
+                   className="w-full py-3.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg shadow-green-600/20 transition-all transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
+                 >
+                    {loading ? <LoadingSpinner /> : "Sign In"}
+                 </button>
+
+                 <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-6">
+                    Don&apos;t have an account? <Link href="/auth/signup" className="font-bold text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300">Create Account</Link>
+                 </p>
+              </form>
+           </div>
+        </div>
+
+        {/* RIGHT COLUMN: VISUAL / BRANDING (Hidden on mobile) */}
+        <div className="hidden md:flex relative bg-gray-100 dark:bg-gray-900 items-center justify-center p-12 overflow-hidden">
+           {/* Abstract Shapes in Right Panel */}
+           <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-blue-500/10"></div>
+           <div className="absolute top-0 right-0 w-64 h-64 bg-green-500/20 rounded-full blur-3xl -mr-16 -mt-16"></div>
+           <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl -ml-16 -mb-16"></div>
+
+           <div className="relative z-10 text-center max-w-sm">
+              <div className="mb-8 relative h-64 w-full">
+                 {/* Ganti dengan ilustrasi/gambar yang relevan */}
+                 <Image 
+                   src="/images/logo/logo_Sw.svg" 
+                   alt="Branding Illustration" 
+                   fill 
+                   className="object-contain drop-shadow-2xl"
+                   priority
+                 />
+              </div>
+              <h3 className="text-2xl font-bold mb-3 text-gray-800 dark:text-white">Smart Gardening Made Easy</h3>
+              <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
+                 Monitor your plants, automate watering, and track growth analytics all in one place.
+              </p>
+           </div>
+        </div>
+
       </div>
     </div>
   );

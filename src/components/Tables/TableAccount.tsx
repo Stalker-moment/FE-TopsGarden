@@ -1,23 +1,30 @@
 "use client";
 
-import React, {
-  useEffect,
-  useState,
-  ChangeEvent,
-  FormEvent,
-} from "react";
+import React, { useEffect, useState, ChangeEvent, FormEvent } from "react";
 import Image from "next/image";
 import Cookies from "js-cookie";
-import CryptoJS from "crypto-js"; // Untuk dekripsi pesan WebSocket
-import { FiEdit3 } from "react-icons/fi";
-import { LuEye } from "react-icons/lu";
-import { MdDeleteForever } from "react-icons/md";
+import CryptoJS from "crypto-js";
+import { 
+  FiEdit3, 
+  FiEye, 
+  FiTrash2, 
+  FiPlus, 
+  FiSearch, 
+  FiX, 
+  FiUser, 
+  FiMail, 
+  FiPhone, 
+  FiShield, 
+  FiMonitor, 
+  FiMapPin,
+  FiActivity
+} from "react-icons/fi";
+import { motion, AnimatePresence } from "framer-motion";
 
+// --- CONFIG & TYPES ---
 const HTTPSAPIURL = process.env.NEXT_PUBLIC_HTTPS_API_URL;
 const WS_SECRET_KEY = process.env.NEXT_PUBLIC_WS_SECRET_KEY || "";
-const HTTPAPIURL = process.env.NEXT_PUBLIC_HTTP_API_URL;
 
-// Tipe data
 interface Contact {
   id: string;
   firstName: string;
@@ -39,7 +46,7 @@ export interface Session {
   ip: string;
   region: string;
   city: string;
-  loc: string; // Format: "lat,lon"
+  loc: string;
   org: string;
   timezone: string;
   createdAt: string;
@@ -59,1124 +66,458 @@ export interface Account {
 
 const roles = ["ADMIN", "USER", "DOSEN", "MAHASISWA", "MAGANG"];
 
+// --- HELPER COMPONENTS ---
+const RoleBadge = ({ role }: { role: string }) => {
+  const styles: { [key: string]: string } = {
+    ADMIN: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800",
+    USER: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800",
+    DOSEN: "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800",
+    MAHASISWA: "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800",
+    MAGANG: "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800",
+    DEFAULT: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700"
+  };
+  return (
+    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${styles[role] || styles.DEFAULT}`}>
+      {role}
+    </span>
+  );
+};
+
+// =========================================
+// KOMPONEN UTAMA TABLE ACCOUNT
+// =========================================
 const TableAccount: React.FC = () => {
-  // State utama
+  // --- STATE ---
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [wsStatus, setWsStatus] = useState<string>("");
+  const [wsStatus, setWsStatus] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [keyword, setKeyword] = useState<string>("");
 
-  // State modal Add Account
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [newAccount, setNewAccount] = useState<{
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone: string;
-    password: string;
-    role: string;
-  }>({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    password: "",
-    role: "",
-  });
-
-  // State modal Delete Account
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
-  const [accountToDelete, setAccountToDelete] = useState<Account | null>(null);
-  const [deleteConfirmationInput, setDeleteConfirmationInput] = useState<string>("");
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  // State modal Detail Account
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
-  const [accountDetails, setAccountDetails] = useState<Account | null>(null);
-
-  // State modal Edit Account
-  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
-  const [accountToEdit, setAccountToEdit] = useState<Account | null>(null);
-  const [editAccount, setEditAccount] = useState<{
-    email: string;
-    password: string;
-    firstName: string;
-    lastName: string;
-    phone: string;
-    noreg: string | null;
-  }>({
-    email: "",
-    password: "",
-    firstName: "",
-    lastName: "",
-    phone: "",
-    noreg: "",
-  });
-
-  // State modal Sessions & Session Detail
-  const [showSessions, setShowSessions] = useState<boolean>(false);
+  // Modals
+  const [modalType, setModalType] = useState<'none' | 'add' | 'edit' | 'delete' | 'detail' | 'sessionDetail'>('none');
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
-  const [isSessionDetailModalOpen, setIsSessionDetailModalOpen] = useState<boolean>(false);
 
-  // State remote logout
-  const [remoteLogoutLoading, setRemoteLogoutLoading] = useState<boolean>(false);
-  const [remoteLogoutError, setRemoteLogoutError] = useState<string | null>(null);
+  // Form Data
+  const [formData, setFormData] = useState({
+    firstName: "", lastName: "", email: "", phone: "", password: "", role: "", noreg: ""
+  });
+  
+  // Delete Confirm
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
 
-  // Notifikasi dan state reconnect WebSocket
-  const [notification, setNotification] = useState<{
-    message: string;
-    type: "success" | "error";
-  } | null>(null);
-  const [shouldReconnect, setShouldReconnect] = useState<boolean>(true);
-  const [reconnectAttempts, setReconnectAttempts] = useState<number>(0);
+  // Notification
+  const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  // Handler notifikasi
+  // --- HELPERS ---
   const showNotification = (message: string, type: "success" | "error") => {
     setNotification({ message, type });
+    setTimeout(() => setNotification(null), 5000);
   };
 
-  // Handler logout (jika session tidak valid)
-  const handleLogout = async () => {
-    const token = Cookies.get("userAuth");
-    if (!token) {
-      window.location.href = "/auth/signin";
-      return;
-    }
-    try {
-      const response = await fetch(`https://${HTTPSAPIURL}/api/users/logout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ token }),
-      });
-      if (!response.ok) {
-        throw new Error(`Logout failed with status: ${response.status}`);
-      }
-      Object.keys(Cookies.get()).forEach((cookieName) => {
-        Cookies.remove(cookieName);
-      });
-      window.location.href = "/auth/signin";
-    } catch (err: any) {
-      console.error("Logout failed:", err);
-      setError(err.message || "Logout failed");
-    }
-  };
-
-  // Fungsi dekripsi data WebSocket menggunakan CryptoJS
   const decryptData = (encryptedData: { iv: string; content: string }) => {
-    const { iv, content } = encryptedData;
-    const ivWordArray = CryptoJS.enc.Hex.parse(iv);
-    const encryptedWordArray = CryptoJS.enc.Hex.parse(content);
-    const encryptedBase64 = CryptoJS.enc.Base64.stringify(encryptedWordArray);
-    const keyStr = WS_SECRET_KEY;
-    const decrypted = CryptoJS.AES.decrypt(
-      encryptedBase64,
-      CryptoJS.enc.Utf8.parse(keyStr),
-      {
-        iv: ivWordArray,
-        mode: CryptoJS.mode.CBC,
-        padding: CryptoJS.pad.Pkcs7,
-      }
-    );
-    const decryptedStr = decrypted.toString(CryptoJS.enc.Utf8);
-    return JSON.parse(decryptedStr);
+    try {
+      const key = CryptoJS.enc.Utf8.parse(WS_SECRET_KEY);
+      const iv = CryptoJS.enc.Hex.parse(encryptedData.iv);
+      const decrypted = CryptoJS.AES.decrypt(
+        CryptoJS.enc.Base64.stringify(CryptoJS.enc.Hex.parse(encryptedData.content)),
+        key,
+        { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
+      );
+      return JSON.parse(decrypted.toString(CryptoJS.enc.Utf8));
+    } catch (e) { return null; }
   };
 
-  // WebSocket connection untuk update data akun secara real-time
+  const handleLogout = () => {
+      Cookies.remove("userAuth");
+      window.location.href = "/auth/signin";
+  };
+
+  // --- WEBSOCKET ---
   useEffect(() => {
     const token = Cookies.get("userAuth");
-    if (!token) {
-      setError("Token autentikasi tidak ditemukan.");
-      setLoading(false);
-      return;
-    }
-    const wsUrl = `wss://${HTTPSAPIURL}/accounts?token=${token}&search=${encodeURIComponent(keyword)}`;
-    console.log(`Menghubungkan ke WebSocket di URL: ${wsUrl}`);
-    const ws = new WebSocket(wsUrl);
-
-    const timeoutId = setTimeout(() => {
-      if (loading) {
-        setError("Timeout: Tidak ada data yang diterima dari WebSocket.");
-        setLoading(false);
-        ws.close();
-      }
-    }, 30000);
-
-    ws.onopen = () => {
-      console.log("WebSocket connection opened.");
-      setWsStatus("Terhubung");
+    if (!token) return;
+    
+    const ws = new WebSocket(`wss://${HTTPSAPIURL}/accounts?token=${token}&search=${encodeURIComponent(keyword)}`);
+    
+    ws.onopen = () => setWsStatus(true);
+    ws.onclose = () => setWsStatus(false);
+    ws.onerror = () => { setError("Koneksi WS Error"); setWsStatus(false); };
+    
+    ws.onmessage = (e) => {
+        try {
+            const raw = JSON.parse(e.data);
+            const data = (raw.iv && raw.content) ? decryptData(raw) : raw;
+            
+            if (Array.isArray(data)) setAccounts(data);
+            else if (data?.accounts) setAccounts(data.accounts);
+            else if (data?.error) setError(data.error);
+            
+            setLoading(false);
+        } catch (err) { console.error(err); }
     };
+    
+    return () => ws.close();
+  }, [keyword]);
 
-    ws.onmessage = (event) => {
-      console.log("Menerima data dari WebSocket:", event.data);
+  // --- HANDLERS ---
+  const handleSearch = (e: FormEvent) => {
+      e.preventDefault();
+      setKeyword(searchTerm);
+  };
+
+  const openModal = (type: typeof modalType, account: Account | null = null) => {
+      setModalType(type);
+      setSelectedAccount(account);
+      if (type === 'edit' && account) {
+          setFormData({
+              firstName: account.contact.firstName,
+              lastName: account.contact.lastName,
+              email: account.contact.email,
+              phone: account.contact.phone,
+              password: "",
+              role: account.role,
+              noreg: account.contact.noReg || ""
+          });
+      } else if (type === 'add') {
+          setFormData({ firstName: "", lastName: "", email: "", phone: "", password: "", role: "", noreg: "" });
+      }
+  };
+
+  const closeModal = () => {
+      setModalType('none');
+      setSelectedAccount(null);
+      setSelectedSession(null);
+      setDeleteConfirmInput("");
+  };
+
+  const handleAddSubmit = async (e: FormEvent) => {
+      e.preventDefault();
       try {
-        const parsedData = JSON.parse(event.data);
-        // Cek apakah data terenkripsi
-        if (parsedData.iv && parsedData.content) {
-          const decryptedData = decryptData(parsedData);
-          console.log("Data terdekripsi:", decryptedData);
-          if (Array.isArray(decryptedData)) {
-            setAccounts(decryptedData as Account[]);
-            setLoading(false);
-            clearTimeout(timeoutId);
-          } else if (decryptedData.accounts && Array.isArray(decryptedData.accounts)) {
-            setAccounts(decryptedData.accounts as Account[]);
-            setLoading(false);
-            clearTimeout(timeoutId);
-          } else if (decryptedData.error) {
-            console.error("Kesalahan dari server:", decryptedData.error);
-            setError(decryptedData.error);
-            setLoading(false);
-            clearTimeout(timeoutId);
-          } else {
-            console.warn("Format data terenkripsi yang diterima tidak dikenali:", decryptedData);
-          }
-        } else if (parsedData.error && parsedData.error.includes("Invalid")) {
-          // Jika terdapat error yang mengandung kata "Invalid" (misal: "Invalid session")
-          setShouldReconnect(false);
-          showNotification("Session Expired, please login again", "error");
-          handleLogout();
-        } else if (Array.isArray(parsedData)) {
-          setAccounts(parsedData as Account[]);
-          setLoading(false);
-          clearTimeout(timeoutId);
-        } else if (parsedData.accounts && Array.isArray(parsedData.accounts)) {
-          setAccounts(parsedData.accounts as Account[]);
-          setLoading(false);
-          clearTimeout(timeoutId);
-        } else if (parsedData.error) {
-          console.error("Kesalahan dari server:", parsedData.error);
-          setError(parsedData.error);
-          setLoading(false);
-          clearTimeout(timeoutId);
-        } else {
-          console.warn("Format data yang diterima tidak dikenali:", parsedData);
-        }
-      } catch (err) {
-        console.error("Error parsing WebSocket message:", err);
-        setError("Gagal memuat data.");
-        setLoading(false);
-        clearTimeout(timeoutId);
-      }
-    };
-
-    ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
-    };
-
-    ws.onclose = () => {
-      console.log("Menutup koneksi WebSocket.");
-      ws.close();
-      clearTimeout(timeoutId);
-    };
-
-    return () => {
-      console.log("Membersihkan koneksi WebSocket.");
-      ws.close();
-      clearTimeout(timeoutId);
-    };
-  }, [keyword, loading]);
-
-  // Handler pencarian
-  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
+          const res = await fetch(`https://${HTTPSAPIURL}/api/users/register`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${Cookies.get("userAuth")}` },
+              body: JSON.stringify(formData)
+          });
+          if (!res.ok) throw new Error((await res.json()).error);
+          showNotification("Akun berhasil ditambahkan", "success");
+          closeModal();
+      } catch (err: any) { showNotification(err.message, "error"); }
   };
 
-  const handleSearchSubmit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setKeyword(searchTerm);
+  const handleEditSubmit = async (e: FormEvent) => {
+      e.preventDefault();
+      try {
+          const res = await fetch(`https://${HTTPSAPIURL}/api/users/edit/others`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${Cookies.get("userAuth")}` },
+              body: JSON.stringify(formData)
+          });
+          if (!res.ok) throw new Error((await res.json()).message);
+          showNotification("Akun berhasil diperbarui", "success");
+          closeModal();
+      } catch (err: any) { showNotification(err.message, "error"); }
   };
 
-  // --- Handler Modal Add Account ---
-  const openModal = () => setIsModalOpen(true);
-  const closeModal = () => setIsModalOpen(false);
-  const handleAddAccountSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    try {
-      // Untuk menyembunyikan request API dari network browser, pertimbangkan untuk melakukan request ini di server side
-      const token = Cookies.get("userAuth");
-      if (!token) {
-        setError("Token autentikasi tidak ditemukan.");
-        return;
-      }
-      const response = await fetch(`https://${HTTPSAPIURL}/api/users/register`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(newAccount),
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Gagal menambahkan akun.");
-      }
-      const addedAccount = await response.json();
-      setAccounts((prev) => [...prev, addedAccount]);
-      closeModal();
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Gagal menambahkan akun.");
-    }
+  const handleDeleteSubmit = async () => {
+      if (!selectedAccount || deleteConfirmInput !== selectedAccount.email) return;
+      try {
+          const res = await fetch(`https://${HTTPSAPIURL}/api/users/edit/delete`, {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${Cookies.get("userAuth")}` },
+              body: JSON.stringify({ email: selectedAccount.email })
+          });
+          if (!res.ok) throw new Error((await res.json()).message);
+          setAccounts(prev => prev.filter(a => a.id !== selectedAccount.id));
+          showNotification("Akun dihapus", "success");
+          closeModal();
+      } catch (err: any) { showNotification(err.message, "error"); }
   };
 
-  // --- Handler Modal Delete Account ---
-  const openDeleteModal = (account: Account) => {
-    setAccountToDelete(account);
-    setDeleteConfirmationInput("");
-    setDeleteError(null);
-    setIsDeleteModalOpen(true);
-  };
-  const closeDeleteModal = () => {
-    setIsDeleteModalOpen(false);
-    setAccountToDelete(null);
-    setDeleteConfirmationInput("");
-    setDeleteError(null);
-  };
-  const handleDeleteConfirmationInputChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setDeleteConfirmationInput(e.target.value);
-  };
-  const handleDeleteAccount = async () => {
-    if (!accountToDelete) return;
-    if (deleteConfirmationInput !== accountToDelete.email) {
-      setDeleteError(`Konfirmasi tidak sesuai. Ketik ulang ${accountToDelete.email} untuk menghapus akun.`);
-      return;
-    }
-    try {
-      const token = Cookies.get("userAuth");
-      if (!token) {
-        setDeleteError("Token autentikasi tidak ditemukan.");
-        return;
-      }
-      const response = await fetch(`https://${HTTPSAPIURL}/api/users/edit/delete`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ email: accountToDelete.email }),
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Gagal menghapus akun.");
-      }
-      setAccounts((prev) =>
-        prev.filter((acc) => acc.id !== accountToDelete.id)
-      );
-      closeDeleteModal();
-    } catch (err: any) {
-      console.error(err);
-      setDeleteError(err.message || "Gagal menghapus akun.");
-    }
-  };
-
-  // --- Handler Modal Detail Account ---
-  const openDetailModal = (account: Account) => {
-    setAccountDetails(account);
-    setIsDetailModalOpen(true);
-  };
-  const closeDetailModal = () => {
-    setIsDetailModalOpen(false);
-    setAccountDetails(null);
-  };
-
-  // --- Handler Modal Edit Account ---
-  const openEditModal = (account: Account) => {
-    setAccountToEdit(account);
-    setEditAccount({
-      email: account.email,
-      password: "",
-      firstName: account.contact.firstName,
-      lastName: account.contact.lastName,
-      phone: account.contact.phone,
-      noreg: account.contact.noReg || "",
-    });
-    setIsEditModalOpen(true);
-  };
-  const closeEditModal = () => {
-    setIsEditModalOpen(false);
-    setAccountToEdit(null);
-    setEditAccount({ email: "", password: "", firstName: "", lastName: "", phone: "", noreg: "" });
-  };
-  const handleEditModalInputChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setEditAccount((prev) => ({ ...prev, [name]: value }));
-  };
-  const handleEditAccountSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    try {
-      const token = Cookies.get("userAuth");
-      if (!token) {
-        setError("Token autentikasi tidak ditemukan.");
-        return;
-      }
-      const response = await fetch(`https://${HTTPSAPIURL}/api/users/edit/others`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          email: editAccount.email,
-          password: editAccount.password,
-          firstName: editAccount.firstName,
-          lastName: editAccount.lastName,
-          phone: editAccount.phone,
-          noreg: editAccount.noreg,
-        }),
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Gagal mengedit akun.");
-      }
-      const updatedAccount = await response.json();
-      setAccounts((prev) =>
-        prev.map((acc) =>
-          acc.id === updatedAccount.id ? updatedAccount : acc
-        )
-      );
-      closeEditModal();
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Gagal mengedit akun.");
-    }
-  };
-
-  // --- Handler Modal Sessions & Session Detail ---
-  const openSessions = () => setShowSessions(true);
-  const closeSessions = () => setShowSessions(false);
-  const openSessionDetailModal = (session: Session) => {
-    setSelectedSession(session);
-    setIsSessionDetailModalOpen(true);
-  };
-  const closeSessionDetailModal = () => {
-    setIsSessionDetailModalOpen(false);
-    setSelectedSession(null);
-    setRemoteLogoutError(null);
-  };
-
-  // --- Handler Remote Logout Session ---
   const handleRemoteLogout = async (sessionId: string) => {
-    setRemoteLogoutLoading(true);
-    setRemoteLogoutError(null);
-    try {
-      const token = Cookies.get("userAuth");
-      if (!token) {
-        throw new Error("Token autentikasi tidak ditemukan.");
-      }
-      const response = await fetch(`https://${HTTPSAPIURL}/api/users/remote-logout-others`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ sessionId }),
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Gagal melakukan logout.");
-      }
-      // Update state akun: hapus session yang sudah logout
-      setAccounts((prevAccounts) =>
-        prevAccounts.map((account) => {
-          if (account.id === accountDetails?.id) {
-            return {
-              ...account,
-              sessions: account.sessions.filter(
-                (session) => session.id !== sessionId
-              ),
-            };
+      try {
+          const res = await fetch(`https://${HTTPSAPIURL}/api/users/remote-logout-others`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${Cookies.get("userAuth")}` },
+              body: JSON.stringify({ sessionId })
+          });
+          if (!res.ok) throw new Error((await res.json()).error);
+          
+          // Optimistic update
+          if (selectedAccount) {
+              const updatedSessions = selectedAccount.sessions.filter(s => s.id !== sessionId);
+              setSelectedAccount({ ...selectedAccount, sessions: updatedSessions });
+              setAccounts(prev => prev.map(a => a.id === selectedAccount.id ? { ...a, sessions: updatedSessions } : a));
           }
-          return account;
-        })
-      );
-      if (accountDetails) {
-        setAccountDetails({
-          ...accountDetails,
-          sessions: accountDetails.sessions.filter(
-            (session) => session.id !== sessionId
-          ),
-        });
-      }
-      closeSessionDetailModal();
-    } catch (err: any) {
-      console.error(err);
-      setRemoteLogoutError(err.message || "Gagal melakukan logout.");
-      setTimeout(() => setRemoteLogoutError(null), 3000);
-    } finally {
-      setRemoteLogoutLoading(false);
-    }
+          setModalType('detail'); // Kembali ke detail akun
+          showNotification("Sesi berhasil di-logout", "success");
+      } catch (err: any) { showNotification(err.message, "error"); }
   };
 
+  // ================== RENDER UI ==================
   return (
-    <div className="rounded-[10px] border border-stroke bg-white p-4 shadow-1 dark:border-dark-3 dark:bg-gray-dark dark:shadow-card sm:p-7.5">
-      {/* Search Bar dan Add Account Button */}
-      <div className="mb-4 flex items-center justify-between">
-        <form onSubmit={handleSearchSubmit} className="flex flex-1">
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={handleInputChange}
-            placeholder="Cari akun..."
-            className="flex-1 rounded-l-md border border-stroke px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary dark:border-gray-600 dark:bg-gray-700 dark:placeholder-gray-400"
-          />
-          <button
-            type="submit"
-            className="hover:bg-primary-dark rounded-r-md bg-primary px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary"
-          >
-            Cari
-          </button>
-        </form>
-        <button
-          onClick={openModal}
-          className="ml-4 rounded-md bg-green-500 px-4 py-2 text-white hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-green-600 dark:hover:bg-green-700"
-        >
-          Add
-        </button>
-      </div>
-
-      {/* Modal Add Account */}
-      {isModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
-          onClick={closeModal}
-        >
-          <div
-            className="w-full max-w-md rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="mb-4 text-xl font-semibold text-gray-800 dark:text-gray-200">
-              Tambah Akun Baru
-            </h2>
-            <form onSubmit={handleAddAccountSubmit}>
-              <div className="mb-4">
-                <label className="mb-2 block text-gray-700 dark:text-gray-300">
-                  First Name
-                </label>
-                <input
-                  type="text"
-                  name="firstName"
-                  value={newAccount.firstName}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                    setNewAccount((prev) => ({ ...prev, firstName: e.target.value }))
-                  }
-                  required
-                  className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-                />
-              </div>
-              <div className="mb-4">
-                <label className="mb-2 block text-gray-700 dark:text-gray-300">
-                  Last Name
-                </label>
-                <input
-                  type="text"
-                  name="lastName"
-                  value={newAccount.lastName}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                    setNewAccount((prev) => ({ ...prev, lastName: e.target.value }))
-                  }
-                  required
-                  className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-                />
-              </div>
-              <div className="mb-4">
-                <label className="mb-2 block text-gray-700 dark:text-gray-300">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  name="email"
-                  value={newAccount.email}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                    setNewAccount((prev) => ({ ...prev, email: e.target.value }))
-                  }
-                  required
-                  className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-                />
-              </div>
-              <div className="mb-4">
-                <label className="mb-2 block text-gray-700 dark:text-gray-300">
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  name="phone"
-                  value={newAccount.phone}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                    setNewAccount((prev) => ({ ...prev, phone: e.target.value }))
-                  }
-                  required
-                  className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-                />
-              </div>
-              <div className="mb-4">
-                <label className="mb-2 block text-gray-700 dark:text-gray-300">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  name="password"
-                  value={newAccount.password}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                    setNewAccount((prev) => ({ ...prev, password: e.target.value }))
-                  }
-                  required
-                  className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-                />
-              </div>
-              <div className="mb-4">
-                <label className="mb-2 block text-gray-700 dark:text-gray-300">
-                  Role
-                </label>
-                <select
-                  name="role"
-                  value={newAccount.role}
-                  onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-                    setNewAccount((prev) => ({ ...prev, role: e.target.value }))
-                  }
-                  required
-                  className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-                >
-                  <option value="">Pilih Role</option>
-                  {roles.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="mr-2 rounded-md bg-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-md bg-primary px-4 py-2 text-white hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary dark:bg-primary dark:focus:ring-primary"
-                >
-                  Tambah
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Edit Account */}
-      {isEditModalOpen && accountToEdit && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
-          onClick={closeEditModal}
-        >
-          <div
-            className="w-full max-w-md rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="mb-4 text-xl font-semibold text-gray-800 dark:text-gray-200">
-              Edit Akun
-            </h2>
-            <form onSubmit={handleEditAccountSubmit}>
-              <div className="mb-4">
-                <label className="mb-2 block text-gray-700 dark:text-gray-300">
-                  Email (tidak bisa diedit)
-                </label>
-                <input
-                  type="email"
-                  name="email"
-                  value={editAccount.email}
-                  readOnly
-                  className="w-full cursor-not-allowed rounded-md border px-3 py-2 bg-gray-200 text-gray-800 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-                />
-              </div>
-              <div className="mb-4">
-                <label className="mb-2 block text-gray-700 dark:text-gray-300">
-                  Password (biarkan kosong jika tidak ingin mengganti)
-                </label>
-                <input
-                  type="password"
-                  name="password"
-                  value={editAccount.password}
-                  onChange={handleEditModalInputChange}
-                  className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-                />
-              </div>
-              <div className="mb-4">
-                <label className="mb-2 block text-gray-700 dark:text-gray-300">
-                  First Name
-                </label>
-                <input
-                  type="text"
-                  name="firstName"
-                  value={editAccount.firstName}
-                  onChange={handleEditModalInputChange}
-                  required
-                  className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-                />
-              </div>
-              <div className="mb-4">
-                <label className="mb-2 block text-gray-700 dark:text-gray-300">
-                  Last Name
-                </label>
-                <input
-                  type="text"
-                  name="lastName"
-                  value={editAccount.lastName}
-                  onChange={handleEditModalInputChange}
-                  required
-                  className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-                />
-              </div>
-              <div className="mb-4">
-                <label className="mb-2 block text-gray-700 dark:text-gray-300">
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  name="phone"
-                  value={editAccount.phone}
-                  onChange={handleEditModalInputChange}
-                  required
-                  className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-                />
-              </div>
-              <div className="mb-4">
-                <label className="mb-2 block text-gray-700 dark:text-gray-300">
-                  No Registrasi
-                </label>
-                <input
-                  type="text"
-                  name="noreg"
-                  value={editAccount.noreg ?? ""}
-                  onChange={handleEditModalInputChange}
-                  className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-                />
-              </div>
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={closeEditModal}
-                  className="mr-2 rounded-md bg-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-md bg-primary px-4 py-2 text-white hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary dark:bg-primary dark:focus:ring-primary"
-                >
-                  Simpan
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Delete Account */}
-      {isDeleteModalOpen && accountToDelete && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
-          onClick={closeDeleteModal}
-        >
-          <div
-            className="w-full max-w-md rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="mb-4 text-xl font-semibold text-gray-800 dark:text-gray-200">
-              Konfirmasi Penghapusan Akun
-            </h2>
-            <p className="mb-4 text-gray-700 dark:text-gray-300">
-              Apakah Anda yakin ingin menghapus akun{" "}
-              <strong>{accountToDelete.email}</strong>? Untuk mengonfirmasi,
-              ketik ulang <strong>{accountToDelete.email}</strong> di bawah ini.
-            </p>
-            <input
-              type="text"
-              value={deleteConfirmationInput}
-              onChange={handleDeleteConfirmationInputChange}
-              placeholder={`Ketik ulang ${accountToDelete.email}`}
-              className="mb-4 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-            />
-            {deleteError && (
-              <div className="mb-4 text-red-500">{deleteError}</div>
+    <div className="w-full max-w-7xl mx-auto px-4 py-8 space-y-6">
+        
+        {/* Notification Toast */}
+        <AnimatePresence>
+            {notification && (
+                <motion.div initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -50, opacity: 0 }} className={`fixed top-6 right-6 z-[100] px-6 py-3 rounded-xl shadow-lg text-white font-bold flex items-center gap-2 ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`}>
+                    {notification.message}
+                </motion.div>
             )}
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={closeDeleteModal}
-                className="mr-2 rounded-md bg-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteAccount}
-                disabled={deleteConfirmationInput !== accountToDelete.email}
-                className={`rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-red-500 ${
-                  deleteConfirmationInput === accountToDelete.email
-                    ? "bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700"
-                    : "cursor-not-allowed bg-red-300 dark:bg-red-300"
-                }`}
-              >
-                Hapus
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        </AnimatePresence>
 
-      {/* Modal Detail Account */}
-      {isDetailModalOpen && accountDetails && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
-          onClick={closeDetailModal}
-        >
-          <div
-            className="max-h-full w-full max-w-lg overflow-y-auto rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="mb-4 text-xl font-semibold text-gray-800 dark:text-gray-200">
-              Detail Akun
-            </h2>
-            <div className="space-y-4">
-              <div className="flex items-center space-x-4">
-                <Image
-                  src={accountDetails.contact.picture ? accountDetails.contact.picture : "https://spkapi.tierkun.my.id/files/img/profile/default.png"}
-                  alt={`${accountDetails.contact.firstName} ${accountDetails.contact.lastName}`}
-                  width={80}
-                  height={80}
-                  className="rounded-full object-cover"
-                />
-                <div>
-                  <h3 className="text-lg font-medium text-gray-800 dark:text-gray-200">
-                    {accountDetails.contact.firstName} {accountDetails.contact.lastName}
-                  </h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {accountDetails.contact.email}
-                  </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {accountDetails.contact.phone}
-                  </p>
-                </div>
-              </div>
-              <div>
-                <h4 className="text-md font-semibold text-gray-700 dark:text-gray-300">
-                  Informasi Akun
-                </h4>
-                <div className="mt-2 space-y-2">
-                  <p><strong>ID:</strong> {accountDetails.id}</p>
-                  <p><strong>Email:</strong> {accountDetails.email}</p>
-                  <p><strong>Role:</strong> {accountDetails.role}</p>
-                  <p><strong>Nomor Registrasi:</strong> {accountDetails.contact.noReg || "N/A"}</p>
-                  <p><strong>Dibuat Pada:</strong> {new Date(accountDetails.createdAt).toLocaleString()}</p>
-                  <p><strong>Terakhir Diperbarui:</strong> {new Date(accountDetails.updatedAt).toLocaleString()}</p>
-                </div>
-              </div>
-              <div className="mt-6">
-                <button
-                  onClick={openSessions}
-                  className="rounded-md bg-blue-500 px-4 py-2 text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  Lihat Sessions
+        {/* Header & Controls */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+            <div>
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                   <FiUser className="text-blue-500"/> Manajemen Akun
+                </h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2 mt-1">
+                   <span className={`w-2 h-2 rounded-full ${wsStatus ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
+                   {wsStatus ? 'Realtime Active' : 'Disconnected'} • {accounts.length} Total Akun
+                </p>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                <form onSubmit={handleSearch} className="relative group flex-1">
+                    <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors"/>
+                    <input 
+                        type="text" 
+                        value={searchTerm} 
+                        onChange={(e) => setSearchTerm(e.target.value)} 
+                        placeholder="Cari nama atau email..." 
+                        className="w-full sm:w-64 pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                    />
+                </form>
+                <button onClick={() => openModal('add')} className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/20 transition-all active:scale-95">
+                    <FiPlus /> Tambah Akun
                 </button>
-              </div>
             </div>
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={closeDetailModal}
-                className="rounded-md bg-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
         </div>
-      )}
 
-      {/* Modal Sessions */}
-      {showSessions && accountDetails && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black bg-opacity-50"
-          onClick={closeSessions}
-        >
-          <div
-            className="w-full max-w-4xl rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="mb-4 text-xl font-semibold text-gray-800 dark:text-gray-200">
-              Active Sessions
-            </h2>
-            <div className="max-w-full overflow-x-auto">
-              <table className="w-full table-auto">
-                <thead>
-                  <tr className="bg-[#F7F9FC] text-left dark:bg-dark-2">
-                    <th className="min-w-[150px] px-4 py-4 font-medium text-dark dark:text-white">
-                      Device
-                    </th>
-                    <th className="min-w-[100px] px-4 py-4 font-medium text-dark dark:text-white">
-                      IP
-                    </th>
-                    <th className="min-w-[150px] px-4 py-4 font-medium text-dark dark:text-white">
-                      City
-                    </th>
-                    <th className="min-w-[150px] px-4 py-4 font-medium text-dark dark:text-white">
-                      Last Accessed
-                    </th>
-                    <th className="px-4 py-4 text-right font-medium text-dark dark:text-white">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {accountDetails.sessions.map((session) => (
-                    <tr key={session.id}>
-                      <td className="border-b border-[#eee] px-4 py-4 dark:border-dark-3">
-                        {session.device}
-                      </td>
-                      <td className="border-b border-[#eee] px-4 py-4 dark:border-dark-3">
-                        {session.ip}
-                      </td>
-                      <td className="border-b border-[#eee] px-4 py-4 dark:border-dark-3">
-                        {session.city}, {session.region}
-                      </td>
-                      <td className="border-b border-[#eee] px-4 py-4 dark:border-dark-3">
-                        {new Date(session.lastAccessedAt).toLocaleString()}
-                      </td>
-                      <td className="border-b border-[#eee] px-4 py-4 text-right dark:border-dark-3">
-                        <button
-                          onClick={() => openSessionDetailModal(session)}
-                          className="text-blue-500 hover:text-blue-700"
-                        >
-                          Detail
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {accountDetails.sessions.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={5}
-                        className="border-b border-[#eee] px-4 py-4 text-center dark:border-dark-3"
-                      >
-                        <p className="text-gray-500 dark:text-gray-300">
-                          Tidak ada sesi yang aktif.
-                        </p>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+        {/* Main Table */}
+        {loading ? (
+            <div className="flex justify-center py-20"><div className="animate-spin w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full"></div></div>
+        ) : (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-gray-700">
+                                <th className="px-6 py-4">User Profile</th>
+                                <th className="px-6 py-4">Role</th>
+                                <th className="px-6 py-4">Kontak</th>
+                                <th className="px-6 py-4">Sesi Aktif</th>
+                                <th className="px-6 py-4 text-right">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                            {accounts.map(account => (
+                                <tr key={account.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors group">
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-4">
+                                            <div className="relative w-10 h-10">
+                                                <Image src={account.contact.picture || "/default-avatar.png"} alt="Avatar" fill className="rounded-full object-cover border border-gray-200 dark:border-gray-600"/>
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-gray-800 dark:text-gray-100">{account.contact.firstName} {account.contact.lastName}</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">{account.contact.email}</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4"><RoleBadge role={account.role} /></td>
+                                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
+                                        <div className="flex items-center gap-2"><FiPhone size={14}/> {account.contact.phone}</div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <span className={`text-xs font-bold px-2 py-1 rounded-lg ${account.sessions.length > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                            {account.sessions.length} Sesi
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => openModal('detail', account)} className="p-2 rounded-lg hover:bg-blue-50 text-blue-600" title="Detail"><FiEye /></button>
+                                            <button onClick={() => openModal('edit', account)} className="p-2 rounded-lg hover:bg-orange-50 text-orange-600" title="Edit"><FiEdit3 /></button>
+                                            <button onClick={() => openModal('delete', account)} className="p-2 rounded-lg hover:bg-red-50 text-red-600" title="Hapus"><FiTrash2 /></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                            {accounts.length === 0 && <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-400">Tidak ada data ditemukan.</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
             </div>
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={closeSessions}
-                className="rounded-md bg-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        )}
 
-      {/* Modal Detail Session */}
-      {isSessionDetailModalOpen && selectedSession && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50"
-          onClick={closeSessionDetailModal}
-        >
-          <div
-            className="max-h-full w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="mb-4 text-xl font-semibold text-gray-800 dark:text-gray-200">
-              Detail Session
-            </h2>
-            <div className="space-y-4">
-              <p><strong>ID:</strong> {selectedSession.id}</p>
-              <p><strong>Device:</strong> {selectedSession.device}</p>
-              <p><strong>IP:</strong> {selectedSession.ip}</p>
-              <p><strong>Region:</strong> {selectedSession.region}</p>
-              <p><strong>City:</strong> {selectedSession.city}</p>
-              <p><strong>Organization:</strong> {selectedSession.org}</p>
-              <p><strong>Timezone:</strong> {selectedSession.timezone}</p>
-              <p><strong>Created At:</strong> {new Date(selectedSession.createdAt).toLocaleString()}</p>
-              <p><strong>Last Accessed At:</strong> {new Date(selectedSession.lastAccessedAt).toLocaleString()}</p>
-              <div className="mt-4">
-                <h3 className="mb-2 text-lg font-medium text-gray-700 dark:text-gray-300">
-                  Lokasi Session
-                </h3>
-                <iframe
-                  width="100%"
-                  height="300"
-                  frameBorder="0"
-                  style={{ border: 0 }}
-                  src={`https://www.google.com/maps?q=${selectedSession.loc}&output=embed`}
-                  allowFullScreen
-                  title="Google Maps"
-                ></iframe>
-              </div>
-            </div>
-            <div className="mt-6 flex justify-between">
-              <button
-                onClick={closeSessionDetailModal}
-                className="rounded-md bg-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-              >
-                Tutup
-              </button>
-              <button
-                onClick={() => handleRemoteLogout(selectedSession.id)}
-                disabled={remoteLogoutLoading}
-                className={`rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-red-500 ${
-                  remoteLogoutLoading
-                    ? "bg-red-300 cursor-not-allowed dark:bg-red-300"
-                    : "bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700"
-                }`}
-              >
-                {remoteLogoutLoading ? "Logging out..." : "Logout"}
-              </button>
-            </div>
-            {remoteLogoutError && (
-              <div className="mt-4 text-red-500">{remoteLogoutError}</div>
+        {/* --- MODALS --- */}
+        <AnimatePresence>
+            {modalType !== 'none' && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={closeModal}>
+                    <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} onClick={e => e.stopPropagation()} className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                        
+                        {/* Modal Header */}
+                        <div className="px-8 py-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50">
+                            <h3 className="text-xl font-bold text-gray-800 dark:text-white">
+                                {modalType === 'add' && "Tambah Akun Baru"}
+                                {modalType === 'edit' && "Edit Data Akun"}
+                                {modalType === 'delete' && "Hapus Akun"}
+                                {modalType === 'detail' && "Detail Akun"}
+                                {modalType === 'sessionDetail' && "Detail Sesi"}
+                            </h3>
+                            <button onClick={closeModal} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"><FiX /></button>
+                        </div>
+
+                        {/* Modal Content Scrollable */}
+                        <div className="p-8 overflow-y-auto">
+                            
+                            {/* ADD / EDIT FORM */}
+                            {(modalType === 'add' || modalType === 'edit') && (
+                                <form onSubmit={modalType === 'add' ? handleAddSubmit : handleEditSubmit} className="space-y-5">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Nama Depan</label>
+                                            <input type="text" required value={formData.firstName} onChange={e => setFormData({...formData, firstName: e.target.value})} className="w-full p-3 rounded-xl border dark:bg-gray-900 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Nama Belakang</label>
+                                            <input type="text" required value={formData.lastName} onChange={e => setFormData({...formData, lastName: e.target.value})} className="w-full p-3 rounded-xl border dark:bg-gray-900 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none" />
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Email</label>
+                                        <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} disabled={modalType === 'edit'} className={`w-full p-3 rounded-xl border dark:bg-gray-900 dark:border-gray-600 outline-none ${modalType === 'edit' ? 'bg-gray-100 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500'}`} />
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Telepon</label>
+                                            <input type="text" required value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full p-3 rounded-xl border dark:bg-gray-900 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">No. Registrasi</label>
+                                            <input type="text" value={formData.noreg} onChange={e => setFormData({...formData, noreg: e.target.value})} className="w-full p-3 rounded-xl border dark:bg-gray-900 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none" />
+                                        </div>
+                                    </div>
+
+                                    {modalType === 'add' && (
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Password</label>
+                                                <input type="password" required value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full p-3 rounded-xl border dark:bg-gray-900 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none" />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Role</label>
+                                                <select required value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="w-full p-3 rounded-xl border dark:bg-gray-900 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none">
+                                                    <option value="">Pilih Role</option>
+                                                    {roles.map(r => <option key={r} value={r}>{r}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    )}
+                                    
+                                    {modalType === 'edit' && (
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Password Baru (Opsional)</label>
+                                            <input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="Biarkan kosong jika tidak ingin ganti" className="w-full p-3 rounded-xl border dark:bg-gray-900 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none" />
+                                        </div>
+                                    )}
+
+                                    <div className="flex justify-end pt-4">
+                                        <button type="submit" className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg transition-transform active:scale-95">
+                                            {modalType === 'add' ? 'Buat Akun' : 'Simpan Perubahan'}
+                                        </button>
+                                    </div>
+                                </form>
+                            )}
+
+                            {/* DELETE CONFIRMATION */}
+                            {modalType === 'delete' && selectedAccount && (
+                                <div className="text-center">
+                                    <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"><FiTrash2 size={28}/></div>
+                                    <p className="text-gray-600 dark:text-gray-300 mb-6">
+                                        Ketik <strong>{selectedAccount.email}</strong> untuk konfirmasi penghapusan permanen.
+                                    </p>
+                                    <input type="text" value={deleteConfirmInput} onChange={e => setDeleteConfirmInput(e.target.value)} className="w-full text-center font-bold p-3 rounded-xl border dark:bg-gray-900 dark:border-gray-600 mb-6 focus:border-red-500 outline-none" placeholder={selectedAccount.email} />
+                                    <button onClick={handleDeleteSubmit} disabled={deleteConfirmInput !== selectedAccount.email} className="w-full py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                                        Hapus Permanen
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* DETAIL VIEW */}
+                            {modalType === 'detail' && selectedAccount && (
+                                <div className="space-y-6">
+                                    <div className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-700">
+                                        <Image src={selectedAccount.contact.picture || "/default-avatar.png"} width={64} height={64} alt="Avatar" className="rounded-full object-cover" />
+                                        <div>
+                                            <h4 className="text-lg font-bold text-gray-800 dark:text-white">{selectedAccount.contact.firstName} {selectedAccount.contact.lastName}</h4>
+                                            <div className="flex items-center gap-2 mt-1"><RoleBadge role={selectedAccount.role}/> <span className="text-xs text-gray-500">{selectedAccount.id}</span></div>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                        <div><span className="text-gray-500 block text-xs">Email</span> <span className="font-medium dark:text-gray-200">{selectedAccount.contact.email}</span></div>
+                                        <div><span className="text-gray-500 block text-xs">Telepon</span> <span className="font-medium dark:text-gray-200">{selectedAccount.contact.phone}</span></div>
+                                        <div><span className="text-gray-500 block text-xs">No. Reg</span> <span className="font-medium dark:text-gray-200">{selectedAccount.contact.noReg || "-"}</span></div>
+                                        <div><span className="text-gray-500 block text-xs">Terdaftar</span> <span className="font-medium dark:text-gray-200">{new Date(selectedAccount.createdAt).toLocaleDateString()}</span></div>
+                                    </div>
+
+                                    <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
+                                        <h4 className="font-bold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2"><FiMonitor/> Sesi Aktif ({selectedAccount.sessions.length})</h4>
+                                        <div className="space-y-2 max-h-40 overflow-y-auto">
+                                            {selectedAccount.sessions.length > 0 ? selectedAccount.sessions.map(s => (
+                                                <div key={s.id} onClick={() => { setSelectedSession(s); setModalType('sessionDetail'); }} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-900/30 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-600">
+                                                    <div>
+                                                        <p className="font-bold text-xs text-gray-800 dark:text-gray-200">{s.device}</p>
+                                                        <p className="text-[10px] text-gray-500">{s.city}, {s.ip}</p>
+                                                    </div>
+                                                    <span className="text-xs text-blue-600 font-medium">Detail</span>
+                                                </div>
+                                            )) : <p className="text-sm text-gray-400 italic">Tidak ada sesi aktif.</p>}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* SESSION DETAIL */}
+                            {modalType === 'sessionDetail' && selectedSession && (
+                                <div className="space-y-6">
+                                    <button onClick={() => setModalType('detail')} className="text-sm text-blue-500 hover:underline mb-2">&larr; Kembali ke Akun</button>
+                                    
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-100 dark:border-gray-700">
+                                            <p className="text-xs font-bold text-gray-400 uppercase">Device</p>
+                                            <p className="font-bold text-gray-800 dark:text-white">{selectedSession.device}</p>
+                                        </div>
+                                        <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-100 dark:border-gray-700">
+                                            <p className="text-xs font-bold text-gray-400 uppercase">IP Address</p>
+                                            <p className="font-mono text-gray-800 dark:text-white">{selectedSession.ip}</p>
+                                        </div>
+                                    </div>
+
+                                    <ul className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+                                        <li className="flex items-center gap-2"><FiMapPin className="text-red-500"/> {selectedSession.city}, {selectedSession.region}</li>
+                                        <li className="flex items-center gap-2"><FiShield className="text-green-500"/> {selectedSession.org}</li>
+                                        <li className="flex items-center gap-2"><FiActivity className="text-blue-500"/> Akses: {new Date(selectedSession.lastAccessedAt).toLocaleString()}</li>
+                                    </ul>
+
+                                    <button onClick={() => handleRemoteLogout(selectedSession.id)} className="w-full py-3 bg-red-100 text-red-600 font-bold rounded-xl hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50 transition-colors">
+                                        Paksa Logout Sesi Ini
+                                    </button>
+                                </div>
+                            )}
+
+                        </div>
+                    </motion.div>
+                </div>
             )}
-          </div>
-        </div>
-      )}
+        </AnimatePresence>
 
-      {/* Kondisi Loading */}
-      {loading && (
-        <div className="flex items-center justify-center p-4">
-          <p className="text-gray-500 dark:text-gray-300">Memuat data...</p>
-        </div>
-      )}
-
-      {/* Kondisi Error */}
-      {!loading && error && (
-        <div className="flex flex-col items-center justify-center p-4">
-          <p className="mb-2 text-red-500">{error}</p>
-          <p className="text-gray-500 dark:text-gray-300">
-            Status WebSocket: {wsStatus}
-          </p>
-        </div>
-      )}
-
-      {/* Tabel Akun */}
-      {!loading && !error && (
-        <div className="max-w-full overflow-x-auto">
-          <table className="w-full table-auto">
-            <thead>
-              <tr className="bg-[#F7F9FC] text-left dark:bg-dark-2">
-                <th className="min-w-[220px] px-4 py-4 font-medium text-dark dark:text-white xl:pl-7.5">
-                  Profile
-                </th>
-                <th className="min-w-[150px] px-4 py-4 font-medium text-dark dark:text-white">
-                  Name
-                </th>
-                <th className="min-w-[120px] px-4 py-4 font-medium text-dark dark:text-white">
-                  Roles
-                </th>
-                <th className="px-4 py-4 text-right font-medium text-dark dark:text-white xl:pr-7.5">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {accounts.map((account) => (
-                <tr key={account.id}>
-                  <td className="border-b border-[#eee] px-4 py-4 dark:border-dark-3 xl:pl-7.5">
-                    <div className="flex items-center">
-                      <Image
-                        src={account.contact.picture ? account.contact.picture : "https://spkapi.tierkun.my.id/files/img/profile/default.png"}
-                        alt={`${account.contact.firstName} ${account.contact.lastName}`}
-                        width={40}
-                        height={40}
-                        className="mr-4 rounded-full object-cover"
-                      />
-                      <div>
-                        <h5 className="text-dark dark:text-white">
-                          {account.contact.firstName} {account.contact.lastName}
-                        </h5>
-                        <p className="mt-[3px] text-body-sm font-medium dark:text-gray-300">
-                          {account.contact.email}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="border-b border-[#eee] px-4 py-4 dark:border-dark-3">
-                    <p className="text-dark dark:text-white">
-                      {account.contact.firstName} {account.contact.lastName}
-                    </p>
-                  </td>
-                  <td className="border-b border-[#eee] px-4 py-4 dark:border-dark-3">
-                    <p
-                      className={`inline-flex rounded-full px-3.5 py-1 text-body-sm font-medium ${
-                      account.role === "ADMIN"
-                        ? "bg-[#219653]/[0.08] text-[#219653]"
-                        : account.role === "USER"
-                        ? "bg-[#D34053]/[0.08] text-[#D34053]"
-                        : account.role === "DOSEN"
-                        ? "bg-[#FFA70B]/[0.08] text-[#FFA70B]"
-                        : account.role === "MAHASISWA"
-                        ? "bg-[#2D9CDB]/[0.08] text-[#2D9CDB]"
-                        : account.role === "MAGANG"
-                        ? "bg-[#9B51E0]/[0.08] text-[#9B51E0]"
-                        : "bg-[#E0E0E0]/[0.08] text-[#828282]"
-                      }`}
-                    >
-                      {account.role}
-                    </p>
-                  </td>
-                  <td className="border-b border-[#eee] px-4 py-4 dark:border-dark-3 xl:pr-7.5">
-                    <div className="flex items-center justify-end space-x-3.5">
-                      <button
-                        onClick={() => openDetailModal(account)}
-                        className="hover:text-primary"
-                        title="Details"
-                      >
-                        <LuEye />
-                      </button>
-                      <button
-                        onClick={() => openEditModal(account)}
-                        className="hover:text-primary"
-                        title="Edit"
-                      >
-                        <FiEdit3 />
-                      </button>
-                      <button
-                        onClick={() => openDeleteModal(account)}
-                        className="hover:text-primary"
-                        title="Delete"
-                      >
-                        <MdDeleteForever />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {accounts.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={4}
-                    className="border-[#eee] px-4 py-4 text-center dark:border-dark-3"
-                  >
-                    <p className="text-gray-500 dark:text-gray-300">
-                      Tidak ada data yang ditemukan.
-                    </p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 };

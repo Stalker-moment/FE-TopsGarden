@@ -1,25 +1,28 @@
 // Sidebar.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import SidebarItem from "@/components/Sidebar/SidebarItem";
+import SidebarItem from "@/components/Sidebar/SidebarItem"; // Asumsi SidebarItem juga diupdate atau sudah mendukung className custom
 import ClickOutside from "@/components/ClickOutside";
-import { MdSpaceDashboard , MdDisplaySettings, MdOutlineWarehouse } from "react-icons/md";
-import { FaHandshake, FaTools, FaLightbulb  } from "react-icons/fa";
-import { TbDeviceAnalytics } from "react-icons/tb";
-import {
+import { 
+  MdSpaceDashboard, 
+  MdDisplaySettings, 
+  MdOutlineWarehouse,
   MdOutlineSupervisorAccount,
   MdOutlineManageAccounts,
   MdAccountCircle,
   MdSettingsSuggest,
+  MdChevronRight // Ikon panah baru
 } from "react-icons/md";
-
+import { FaHandshake, FaTools, FaLightbulb } from "react-icons/fa";
+import { TbDeviceAnalytics } from "react-icons/tb";
+import { GiWateringCan } from "react-icons/gi";
+import { motion, AnimatePresence } from "framer-motion";
 import Cookies from "js-cookie";
 import CryptoJS from "crypto-js";
-import { GiWateringCan } from "react-icons/gi";
 
 const WS_SECRET_KEY = process.env.NEXT_PUBLIC_WS_SECRET_KEY || "";
 
@@ -35,300 +38,196 @@ interface MenuItem {
   isAdmin: boolean;
 }
 
-// Struktur menuGroups tetap sama
+// Struktur menuGroups
 const menuGroups = [
   {
     name: "MAIN MENU",
     menuItems: [
-      {
-        icon: <MdSpaceDashboard  size={24} />,
-        label: "Home",
-        route: "/dashboard",
-        isAdmin: false,
-      },
-      {
-        icon: <FaLightbulb  style={{ fontSize: "24px" }} />,
-        label: "Light Control",
-        route: "/dashboard/light-control",
-        isAdmin: false,
-      },
-      {
-        icon: <GiWateringCan style={{ fontSize: "24px" }} />,
-        label: "Smart Watering",
-        route: "/dashboard/smartwatering",
-        isAdmin: true,
-      },
-      {
-        icon: <MdSettingsSuggest style={{ fontSize: "24px" }} />,
-        label: "Output Setting",
-        route: "/dashboard/output",
-        isAdmin: false,
-      },
+      { icon: <MdSpaceDashboard size={22} />, label: "Home", route: "/dashboard", isAdmin: false },
+      { icon: <FaLightbulb size={20} />, label: "Light Control", route: "/dashboard/light-control", isAdmin: false },
+      { icon: <GiWateringCan size={22} />, label: "Smart Watering", route: "/dashboard/smartwatering", isAdmin: true },
+      { icon: <MdSettingsSuggest size={22} />, label: "Output Setting", route: "/dashboard/output", isAdmin: false },
     ],
   },
   {
     name: "OTHERS",
     menuItems: [
-      {
-        icon: <MdAccountCircle size={24} />,
-        label: "Profile",
-        route: "/dashboard/profile",
-        isAdmin: false,
-      },
-      {
-        icon: <MdOutlineManageAccounts style={{ fontSize: "24px" }} />,
-        label: "Account Settings",
-        route: "/dashboard/pages/settings",
-        isAdmin: false,
-      },
-      {
-        icon: <MdOutlineSupervisorAccount style={{ fontSize: "24px" }} />,
-        label: "Accounts Management",
-        route: "/dashboard/account",
-        isAdmin: true,
-      },
-      // {
-      //   icon: <MdDisplaySettings style={{ fontSize: "24px" }} />,
-      //   label: "Setting Product/Landing page",
-      //   route: "/dashboard/user",
-      //   isAdmin: true,
-      // },
+      { icon: <MdAccountCircle size={22} />, label: "Profile", route: "/dashboard/profile", isAdmin: false },
+      { icon: <MdOutlineManageAccounts size={22} />, label: "Account Settings", route: "/dashboard/pages/settings", isAdmin: false },
+      { icon: <MdOutlineSupervisorAccount size={22} />, label: "Accounts Management", route: "/dashboard/account", isAdmin: true },
     ],
   },
 ];
 
-// Fungsi dekripsi data WebSocket menggunakan CryptoJS
+// Dekripsi Data
 const decryptData = (encryptedData: { iv: string; content: string } | null) => {
-  if (!encryptedData || !encryptedData.iv || !encryptedData.content) {
-    console.error("Invalid encrypted data:", encryptedData);
-    return null;
-  }
-
+  if (!encryptedData?.iv || !encryptedData?.content) return null;
   try {
     const { iv, content } = encryptedData;
-    const ivWordArray = CryptoJS.enc.Hex.parse(iv);
-    const encryptedWordArray = CryptoJS.enc.Hex.parse(content);
-    const encryptedBase64 = CryptoJS.enc.Base64.stringify(encryptedWordArray);
-    const keyStr = WS_SECRET_KEY;
-
     const decrypted = CryptoJS.AES.decrypt(
-      encryptedBase64,
-      CryptoJS.enc.Utf8.parse(keyStr),
-      {
-        iv: ivWordArray,
-        mode: CryptoJS.mode.CBC,
-        padding: CryptoJS.pad.Pkcs7,
-      },
+      CryptoJS.enc.Base64.stringify(CryptoJS.enc.Hex.parse(content)),
+      CryptoJS.enc.Utf8.parse(WS_SECRET_KEY),
+      { iv: CryptoJS.enc.Hex.parse(iv), mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
     );
-
-    const decryptedStr = decrypted.toString(CryptoJS.enc.Utf8);
-    return JSON.parse(decryptedStr);
-  } catch (error) {
-    console.error("Decryption failed:", error);
-    return null;
-  }
+    return JSON.parse(decrypted.toString(CryptoJS.enc.Utf8));
+  } catch (error) { return null; }
 };
 
 const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
   const pathname = usePathname();
-
   const [userInfo, setUserInfo] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
-
-  // State untuk menampung apakah tiap group sedang terbuka (expand) atau tidak
+  
+  // State Accordion (Default semua terbuka)
   const [openGroups, setOpenGroups] = useState<boolean[]>(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("sidebarOpenGroups");
-      if (stored) {
-        // Pastikan parse ke array boolean
-        try {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) {
-            return parsed;
-          }
-        } catch (e) {
-          console.error("Error parsing localStorage data:", e);
-        }
-      }
+      if (stored) { try { return JSON.parse(stored); } catch {} }
     }
-    // Default: semua terbuka (atau semua tertutup) — silakan diubah sesuai kebutuhan
     return menuGroups.map(() => true);
   });
 
-  // Fungsi toggle untuk buka/tutup group
   const handleToggleGroup = (index: number) => {
-    setOpenGroups((prevOpenGroups) => {
-      const newOpenGroups = [...prevOpenGroups];
-      newOpenGroups[index] = !newOpenGroups[index];
-      // Simpan ke localStorage
-      if (typeof window !== "undefined") {
-        localStorage.setItem(
-          "sidebarOpenGroups",
-          JSON.stringify(newOpenGroups),
-        );
-      }
-      return newOpenGroups;
+    setOpenGroups((prev) => {
+      const newOpen = [...prev];
+      newOpen[index] = !newOpen[index];
+      localStorage.setItem("sidebarOpenGroups", JSON.stringify(newOpen));
+      return newOpen;
     });
   };
 
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
-        const response = await fetch(`/api/user-info`, {
-          method: "GET",
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-
+        const res = await fetch(`/api/user-info`);
+        if (res.ok) {
+          const data = await res.json();
           if (data?.iv && data?.content) {
-            const decryptedData = decryptData(data);
-            if (decryptedData) {
-              setUserInfo(decryptedData);
-              setIsAdmin(decryptedData.role === "ADMIN");
+            const decrypted = decryptData(data);
+            if (decrypted) {
+              setUserInfo(decrypted);
+              setIsAdmin(decrypted.role === "ADMIN");
             }
-          } else {
-            console.error("Invalid encrypted response from API:", data);
           }
-        } else {
-          console.error("Failed to fetch user info");
         }
-      } catch (error) {
-        console.error("Error fetching user info:", error);
-      }
+      } catch (e) { console.error("User info fetch error", e); }
     };
-
     fetchUserInfo();
   }, []);
 
   return (
     <ClickOutside onClick={() => setSidebarOpen(false)}>
       <aside
-        className={`absolute left-0 top-0 z-9999 flex h-screen w-72.5 flex-col overflow-y-hidden 
-    border-r border-stroke bg-white dark:border-stroke-dark dark:bg-gray-dark 
-    lg:static lg:translate-x-0 
-    ${sidebarOpen ? "translate-x-0 duration-300 ease-linear" : "-translate-x-full"}`}
+        className={`fixed left-0 top-0 z-50 flex h-screen w-72 flex-col overflow-y-hidden bg-white dark:bg-gray-900 shadow-lg transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
       >
-        {/* Bagian header logo + tombol toggle */}
-        <div className="flex items-center justify-between px-6 py-8">
-          <Link href="/">
-            <Image
-              width={196}
-              height={196}
-              src={"/images/logo/logo_Sw.svg"}
-              alt="Logo"
-              priority
-              className="dark:hidden"
-            />
-            <Image
-              width={196}
-              height={196}
-              src={"/images/logo/logo_Sw.svg"}
-              alt="Logo"
-              priority
-              className="hidden dark:block"
-            />
+        {/* --- Header Logo --- */}
+        <div className="flex items-center justify-between gap-2 px-6 py-6 lg:py-8">
+          <Link href="/" className="flex items-center gap-2">
+            {/* Pastikan ukuran logo konsisten */}
+            <div className="relative h-10 w-32"> 
+                <Image
+                fill
+                src={"/images/logo/logo_Sw.svg"}
+                alt="Logo"
+                className="object-contain dark:hidden"
+                priority
+                />
+                <Image
+                fill
+                src={"/images/logo/logo_Sw.svg"}
+                alt="Logo"
+                className="hidden object-contain dark:block"
+                priority
+                />
+            </div>
           </Link>
 
-          {/* Tombol toggle sidebar, muncul hanya di mobile */}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="block lg:hidden"
+            className="block lg:hidden text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
           >
-            <svg
-              className="fill-current"
-              width="20"
-              height="18"
-              viewBox="0 0 20 18"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              {/* SVG Path */}
-              <path
-                d="M18 1H2C1.73478 1 
-              1.48043 1.10536 1.29289 1.29289C1.10536 1.48043 
-              1 1.73478 1 2C1 2.26522 1.10536 2.51957 
-              1.29289 2.70711C1.48043 2.89464 1.73478 
-              3 2 3H18C18.2652 3 18.5196 2.89464 
-              18.7071 2.70711C18.8946 2.51957 19 
-              2.26522 19 2C19 1.73478 18.8946 1.48043 
-              18.7071 1.29289C18.5196 1.10536 18.2652 
-              1 18 1ZM18 7H2C1.73478 7 1.48043 7.10536 
-              1.29289 7.29289C1.10536 7.48043 1 7.73478 
-              1 8C1 8.26522 1.10536 8.51957 1.29289 
-              8.70711C1.48043 8.89464 1.73478 9 2 
-              9H18C18.2652 9 18.5196 8.89464 18.7071 
-              8.70711C18.8946 8.51957 19 8.26522 19 
-              8C19 7.73478 18.8946 7.48043 18.7071 
-              7.29289C18.5196 7.10536 18.2652 7 18 7ZM18 
-              13H2C1.73478 13 1.48043 13.1054 1.29289 
-              13.2929C1.10536 13.4804 1 13.7348 1 14C1 
-              14.2652 1.10536 14.5196 1.29289 14.7071C1.48043 
-              14.8946 1.73478 15 2 15H18C18.2652 15 18.5196 
-              14.8946 18.7071 14.7071C18.8946 14.5196 19 
-              14.2652 19 14C19 13.7348 18.8946 13.4804 
-              18.7071 13.2929C18.5196 13.1054 18.2652 
-              13 18 13Z"
-                fill=""
-              />
+            <svg className="fill-current" width="20" height="18" viewBox="0 0 20 18" xmlns="http://www.w3.org/2000/svg">
+              <path d="M19 8.175H2.98748L9.36248 1.6875C9.69998 1.35 9.69998 0.825 9.36248 0.4875C9.02498 0.15 8.49998 0.15 8.16248 0.4875L0.399976 8.3625C0.0624756 8.7 0.0624756 9.225 0.399976 9.5625L8.16248 17.4375C8.31248 17.5875 8.53748 17.7 8.76248 17.7C8.98748 17.7 9.17498 17.625 9.36248 17.475C9.69998 17.1375 9.69998 16.6125 9.36248 16.275L3.02498 9.8625H19C19.45 9.8625 19.825 9.4875 19.825 9.0375C19.825 8.55 19.45 8.175 19 8.175Z" />
             </svg>
           </button>
         </div>
 
-        {/* Bagian menu */}
-        <div className="no-scrollbar flex flex-col overflow-y-auto duration-300 ease-linear">
-          <nav className="mt-1 px-4 lg:px-6">
+        {/* --- Menu List --- */}
+        <div className="no-scrollbar flex flex-col overflow-y-auto duration-300 ease-linear px-4 pb-4">
+          <nav className="space-y-6 mt-2">
             {menuGroups.map((group, groupIndex) => {
-              // Cek apakah group ini sedang terbuka atau tidak
               const isGroupOpen = openGroups[groupIndex];
 
               return (
-                <div key={groupIndex} className="mb-4">
-                  {/* Header group + ikon toggle */}
-                  <div
+                <div key={groupIndex}>
+                  {/* Group Header */}
+                  <button
                     onClick={() => handleToggleGroup(groupIndex)}
-                    className="mb-2 flex cursor-pointer items-center justify-between"
+                    className="group mb-3 flex w-full items-center justify-between px-4 text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                   >
-                    <h3 className="text-sm font-medium text-dark-4 dark:text-dark-6">
-                      {group.name}
-                    </h3>
-                    <svg
-                      className={`h-4 w-4 transition-transform ${
-                        isGroupOpen ? "rotate-180" : ""
-                      }`}
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      viewBox="0 0 24 24"
-                    >
-                      <path d="M6 9l6 6 6-6" />
-                    </svg>
-                  </div>
+                    {group.name}
+                    <MdChevronRight 
+                        className={`h-4 w-4 transition-transform duration-200 ${isGroupOpen ? "rotate-90" : ""}`} 
+                    />
+                  </button>
 
-                  {/* Daftar menu item, tampil jika isGroupOpen == true */}
-                  {isGroupOpen && (
-                    <ul className="mb-2 flex flex-col gap-2">
-                      {group.menuItems
-                        .filter((menuItem) => !menuItem.isAdmin || isAdmin)
-                        .map((menuItem, menuIndex) => (
-                          <SidebarItem
-                            key={menuIndex}
-                            item={menuItem}
-                            isActive={
-                              pathname === menuItem.route ||
-                              (menuItem.route !== "/dashboard" &&
-                                pathname?.startsWith(menuItem.route) === true)
-                            }
-                          />
-                        ))}
-                    </ul>
-                  )}
-                  <hr className="border-t border-gray-200 dark:border-stroke-dark" />
+                  {/* Menu Items */}
+                  <AnimatePresence>
+                    {isGroupOpen && (
+                        <motion.ul
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.3, ease: "easeInOut" }}
+                            className="space-y-1 overflow-hidden"
+                        >
+                        {group.menuItems
+                            .filter((menuItem) => !menuItem.isAdmin || isAdmin)
+                            .map((menuItem, menuIndex) => {
+                                const isActive = pathname === menuItem.route || 
+                                                (menuItem.route !== "/dashboard" && pathname?.startsWith(menuItem.route));
+
+                                return (
+                                    <li key={menuIndex}>
+                                        <Link
+                                            href={menuItem.route}
+                                            className={`group relative flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium duration-300 ease-in-out 
+                                                ${isActive 
+                                                    ? "bg-green-600 text-white shadow-lg shadow-green-500/30" 
+                                                    : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                                                }
+                                            `}
+                                        >
+                                            <span className={`text-xl ${isActive ? "text-white" : "text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-white transition-colors"}`}>
+                                                {menuItem.icon}
+                                            </span>
+                                            {menuItem.label}
+                                        </Link>
+                                    </li>
+                                );
+                            })}
+                        </motion.ul>
+                    )}
+                  </AnimatePresence>
                 </div>
               );
             })}
           </nav>
         </div>
+        
+        {/* User Info Footer (Opsional) */}
+        {/* <div className="mt-auto border-t border-gray-100 dark:border-gray-800 p-4">
+            <div className="flex items-center gap-3">
+                 <div className="h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-700"></div> 
+                 <div>
+                     <p className="text-sm font-medium text-gray-800 dark:text-white">User</p>
+                     <p className="text-xs text-gray-500">Role</p>
+                 </div>
+            </div>
+        </div> */}
+
       </aside>
     </ClickOutside>
   );
