@@ -1,5 +1,6 @@
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import TableOutput from "@/components/TableOutput/index";
+import LiveLogs from "@/components/TableOutput/LiveLogs";
 import { Metadata } from "next";
 import DefaultLayout from "@/components/Layouts/DefaultLaout";
 import Cookies from "js-cookie";
@@ -17,6 +18,7 @@ const TablesPage = () => {
 
       <div className="flex flex-col gap-10">
         <TableOutput />
+        <LiveLogs />
       </div>
     </DefaultLayout>
   );
