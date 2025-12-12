@@ -12,8 +12,9 @@ import {
   Play,
   Pause,
   Download,
-  Power,     // Icon baru untuk Connect/Disconnect
-  WifiOff    // Icon untuk status disconnected
+  Power,
+  WifiOff,
+  Activity // Icon untuk speed/activity
 } from "lucide-react"; 
 
 const HTTPSAPIURL = process.env.NEXT_PUBLIC_HTTPS_API_URL;
@@ -29,9 +30,10 @@ const LiveLogs = () => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   
   // State Utama
-  const [isActive, setIsActive] = useState(false); // Kontrol Koneksi (ON/OFF)
-  const [isConnected, setIsConnected] = useState(false); // Status WebSocket Real
-  const [isPaused, setIsPaused] = useState(false); // Kontrol Scrolling (Buffering)
+  const [isActive, setIsActive] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [logsPerSecond, setLogsPerSecond] = useState(0); // State untuk kecepatan logs
 
   // State UI Layout
   const [isExpanded, setIsExpanded] = useState(false);
@@ -41,13 +43,31 @@ const LiveLogs = () => {
   const wsRef = useRef<WebSocket | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
   
-  // Refs untuk logika buffering
+  // Refs untuk logika internal
   const isPausedRef = useRef(false); 
-  const backlogRef = useRef<LogEntry[]>([]); 
+  const backlogRef = useRef<LogEntry[]>([]);
+  const incomingCounterRef = useRef(0); // Counter sementara untuk menghitung speed
+
+  // --- Interval Penghitung Kecepatan (1 Detik) ---
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+
+    if (isActive) {
+      interval = setInterval(() => {
+        // Update state dengan jumlah log yang masuk 1 detik terakhir
+        setLogsPerSecond(incomingCounterRef.current);
+        // Reset counter
+        incomingCounterRef.current = 0;
+      }, 1000);
+    } else {
+      setLogsPerSecond(0);
+    }
+
+    return () => clearInterval(interval);
+  }, [isActive]);
 
   // --- WebSocket Logic ---
   useEffect(() => {
-    // Jika tidak aktif (User belum klik Start), jangan lakukan apa-apa
     if (!isActive) {
       if (wsRef.current) {
         wsRef.current.close();
@@ -87,7 +107,10 @@ const LiveLogs = () => {
         }
 
         if (newLogs.length > 0) {
-          // Jika sedang Pause (Buffering), simpan ke backlog
+          // Increment counter untuk speed logs/sec
+          incomingCounterRef.current += newLogs.length;
+
+          // Logika Pause/Backlog
           if (isPausedRef.current) {
             backlogRef.current = [...backlogRef.current, ...newLogs];
           } else {
@@ -101,7 +124,6 @@ const LiveLogs = () => {
 
     ws.onclose = () => { 
       setIsConnected(false); 
-      // Jika close terjadi bukan karena user mematikan (misal server mati), beri info
       if (isActive) addSystemLog("Disconnected from server."); 
     };
 
@@ -115,7 +137,7 @@ const LiveLogs = () => {
         ws.close();
       }
     };
-  }, [isActive]); // Re-run effect jika isActive berubah
+  }, [isActive]);
 
   // Auto scroll logic
   useEffect(() => {
@@ -125,7 +147,6 @@ const LiveLogs = () => {
   }, [logs, isCollapsed, isExpanded, isPaused]);
 
   // --- Helper Functions ---
-
   const addSystemLog = (msg: string) => {
     setLogs((prev) => [...prev, { timestamp: new Date().toISOString(), level: "SYSTEM", scope: "Client", message: msg }]);
   };
@@ -135,24 +156,20 @@ const LiveLogs = () => {
     backlogRef.current = []; 
   };
 
-  // Toggle Koneksi (ON/OFF)
   const toggleConnection = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isActive) {
-        // Matikan
         setIsActive(false);
-        setIsPaused(false); // Reset pause state
+        setIsPaused(false);
         isPausedRef.current = false;
         backlogRef.current = [];
         addSystemLog("Session stopped by user.");
     } else {
-        // Nyalakan
-        clearLogs(); // Optional: Bersihkan log lama saat start baru
+        clearLogs();
         setIsActive(true);
     }
   };
 
-  // Toggle Buffering (Pause Scrolling)
   const togglePause = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isActive) return;
@@ -161,7 +178,6 @@ const LiveLogs = () => {
     setIsPaused(nextState);
     isPausedRef.current = nextState;
 
-    // Flush backlog jika unpause
     if (!nextState && backlogRef.current.length > 0) {
       setLogs((prev) => [...prev, ...backlogRef.current]);
       backlogRef.current = []; 
@@ -255,7 +271,17 @@ const LiveLogs = () => {
         </div>
 
         <div className="flex items-center gap-1">
-           {/* POWER BUTTON (Start/Stop Connection) */}
+           {/* Speed Indicator (New) - Visible only when Active */}
+           {isActive && (
+             <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 mr-2 rounded-lg bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400">
+                <Activity size={14} className={logsPerSecond > 5 ? "text-green-500 animate-pulse" : ""} />
+                <span className="text-[10px] font-mono font-medium min-w-[60px] text-right">
+                    {logsPerSecond.toFixed(1)}/s
+                </span>
+             </div>
+           )}
+
+           {/* POWER BUTTON */}
            <button 
             onClick={toggleConnection}
             className={`p-1.5 rounded-lg transition-colors mr-2 ${
@@ -263,12 +289,10 @@ const LiveLogs = () => {
                 ? "text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 bg-red-50/50 dark:bg-red-900/10" 
                 : "text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 bg-green-50/50 dark:bg-green-900/10"
             }`}
-            title={isActive ? "Stop Connection" : "Start Connection"}
           >
             <Power size={16} strokeWidth={2.5} />
           </button>
 
-           {/* Pause/Resume Button (Hanya aktif jika koneksi hidup) */}
            <button 
             onClick={togglePause}
             disabled={!isActive}
@@ -278,24 +302,20 @@ const LiveLogs = () => {
                     ? "text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20" 
                     : "text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20"
             }`}
-            title={isPaused ? "Resume Scrolling" : "Pause Scrolling"}
           >
             {isPaused ? <Play size={16} /> : <Pause size={16} />}
           </button>
 
-          {/* Download Button */}
           <button 
             onClick={downloadLogs}
             disabled={logs.length === 0}
             className="p-1.5 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Download Logs"
           >
             <Download size={16} />
           </button>
 
           <div className="w-px h-4 bg-gray-300 dark:bg-gray-700 mx-1"></div>
 
-          {/* Clear Button */}
           <button 
             onClick={(e) => { e.stopPropagation(); clearLogs(); }}
             className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
@@ -385,9 +405,16 @@ const LiveLogs = () => {
         {/* Footer Info */}
         {!isCollapsed && (
              <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#151518] text-[10px] text-gray-500 flex justify-between items-center select-none">
-                <div className="flex items-center gap-3">
-                     <span>Total Events: {logs.length}</span>
+                <div className="flex items-center gap-4">
+                     <span>Total: {logs.length}</span>
                      {!isActive && <span className="text-red-500 flex items-center gap-1"><WifiOff size={10}/> Disconnected</span>}
+                     
+                     {/* Mobile Speed Indicator (Shows in footer on mobile, header on desktop) */}
+                     {isActive && (
+                        <span className="md:hidden flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                            <Activity size={10} /> {logsPerSecond.toFixed(1)}/s
+                        </span>
+                     )}
                 </div>
                 
                 <span className="flex items-center gap-1">
@@ -399,7 +426,7 @@ const LiveLogs = () => {
                     ) : isActive ? (
                         <>
                             <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> 
-                            Realtime Mode
+                            Realtime
                         </>
                     ) : null}
                 </span>
