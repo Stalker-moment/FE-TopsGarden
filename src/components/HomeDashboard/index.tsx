@@ -21,8 +21,8 @@ const WS_SECRET_KEY = process.env.NEXT_PUBLIC_WS_SECRET_KEY;
 const WSS_HOST = HTTPSAPIURL || '';
 
 // --- Tipe Data ---
-type HistoricalEntryNumeric = { time: string; value: number };
-type HistoricalEntryBoolean = { time: string; value: boolean };
+type HistoricalEntryNumeric = { time: string | number; value: number };
+type HistoricalEntryBoolean = { time: string | number; value: boolean };
 
 interface SensorData {
     ph: number | typeof NaN;
@@ -50,6 +50,43 @@ interface DecryptedSensorData {
 const MAX_HISTORY_LENGTH = 30;
 
 // --- Helper Functions ---
+const parseTimestamp = (timeString: any): number => {
+    if (!timeString) return 0;
+    if (typeof timeString === 'number') return timeString;
+    
+    // Handle Date object directly
+    if (timeString instanceof Date) return timeString.getTime();
+
+    // Handle string epoch (e.g. "1735573625000")
+    if (typeof timeString === 'string' && /^\d+$/.test(timeString)) {
+        const epoch = parseInt(timeString, 10);
+        if (!isNaN(epoch)) return epoch;
+    }
+
+    if (typeof timeString !== 'string') return 0;
+
+    try {
+        // Try parsing as ISO or full date first
+        // Check if it looks like a date string
+        if (timeString.includes('-') || timeString.includes('/') || timeString.includes('T')) {
+             let date = new Date(timeString);
+             if (!isNaN(date.getTime())) return date.getTime();
+        }
+        
+        // Try parsing as HH:mm:ss
+        const today = new Date();
+        const parts = timeString.split(':');
+        if (parts.length >= 2) {
+            const [hours, minutes, seconds] = parts.map(Number);
+            if (isFinite(hours) && isFinite(minutes)) {
+                today.setHours(hours, minutes, seconds || 0, 0);
+                return today.getTime();
+            }
+        }
+    } catch (e) { return 0; }
+    return 0;
+};
+
 const formatTimeHM = (timeString: string | null | undefined): string => {
     if (!timeString) return "--:--";
     try {
@@ -79,23 +116,118 @@ const decryptData = (encryptedData: { iv: string; content: string }): DecryptedS
 };
 
 // ============================================================
-// KOMPONEN SENSOR DETAIL
+// KOMPONEN HISTORY VIEW (API BASED)
+// ============================================================
+const HistoryView: React.FC<{ sensorId: string; onBack: () => void; isDarkMode: boolean }> = ({ sensorId, onBack, isDarkMode }) => {
+    const [selectedDate, setSelectedDate] = useState<string>("");
+    const [historyData, setHistoryData] = useState<{ ph: HistoricalEntryNumeric[], voltage: HistoricalEntryNumeric[], temp: HistoricalEntryNumeric[], humidity: HistoricalEntryNumeric[] }>({ ph: [], voltage: [], temp: [], humidity: [] });
+    const [loading, setLoading] = useState(false);
+    const isCombinedView = sensorId === 'ph';
+
+    const fetchHistory = async (date: string) => {
+        const token = Cookies.get("userAuth");
+        if (!token || !HTTPSAPIURL) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`https://${HTTPSAPIURL}/api/sensor/history?date=${date}&limit=2000`, { headers: { 'Authorization': `Bearer ${token}` } });
+            const json = await res.json();
+            const h = json.data;
+            if (h) {
+                const parse = (d: any) => {
+                    if (!d?.value || !d?.timestamp) return [];
+                    return d.timestamp.map((ts: string, i: number) => ({ time: parseTimestamp(ts), value: d.value[i] }))
+                        .filter((x: any) => typeof x.value === 'number' && isFinite(x.value) && x.time > 0);
+                };
+                setHistoryData({
+                    ph: h.ph ? parse(h.ph) : [],
+                    voltage: h.voltage ? parse(h.voltage) : [],
+                    temp: h.temperature ? parse(h.temperature) : [],
+                    humidity: h.humidity ? parse(h.humidity) : []
+                });
+            }
+        } catch (e) { console.error(e); } finally { setLoading(false); }
+    };
+
+    useEffect(() => { if (selectedDate) fetchHistory(selectedDate); }, [selectedDate]);
+
+    const primarySensorDetails = useMemo(() => {
+        switch (sensorId) {
+            case "ph": return { label: "Water pH", color: "#3b82f6" };
+            case "temperature": return { label: "Temperature", color: "#ef4444" };
+            case "humidity": return { label: "Humidity", color: "#22c55e" };
+            default: return { label: "Unknown", color: "#6b7280" };
+        }
+    }, [sensorId]);
+
+    const chartSeries = useMemo(() => {
+        const mapData = (entries: HistoricalEntryNumeric[]) =>
+            entries.map(d => ({ x: d.time, y: d.value }));
+
+        if (isCombinedView) {
+            return [
+                { name: "pH", data: mapData(historyData.ph) },
+                { name: "Voltage", data: mapData(historyData.voltage) }
+            ];
+        }
+        const data = sensorId === 'temperature' ? historyData.temp : historyData.humidity;
+        return [{ name: primarySensorDetails.label, data: mapData(data) }];
+    }, [isCombinedView, historyData, sensorId, primarySensorDetails]);
+
+    const chartOptions: ApexOptions = {
+        chart: { type: 'area', background: 'transparent', toolbar: { show: true }, zoom: { enabled: true, type: 'x', autoScaleYaxis: true } },
+        colors: isCombinedView ? ['#3b82f6', '#f97316'] : [primarySensorDetails.color],
+        stroke: { curve: 'smooth', width: 2 },
+        xaxis: { type: 'datetime', labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' } } },
+        yaxis: isCombinedView ? [
+            { title: { text: "pH" }, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' } } },
+            { opposite: true, title: { text: "Volt" }, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' } } }
+        ] : { labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' } } },
+        theme: { mode: isDarkMode ? 'dark' : 'light' },
+        noData: { text: "Pilih tanggal untuk melihat data", align: 'center', verticalAlign: 'middle', style: { color: isDarkMode ? '#9ca3af' : '#6b7280' } }
+    };
+
+    return (
+        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="w-full max-w-5xl mx-auto">
+            <button onClick={onBack} className="mb-6 flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 transition-colors group">
+                <FaArrowLeft className="transition-transform group-hover:-translate-x-1" /> Kembali ke Realtime
+            </button>
+            <div className="relative overflow-hidden rounded-[2.5rem] bg-white/70 dark:bg-gray-800/60 backdrop-blur-xl border border-white/50 dark:border-gray-700/50 shadow-2xl p-6 md:p-10">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Riwayat Data {primarySensorDetails.label}</h2>
+                    <div className="flex items-center gap-2">
+                        <FaRegCalendarAlt className="text-gray-500" />
+                        <input type="date" className="bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 text-sm" onChange={(e) => setSelectedDate(e.target.value)} value={selectedDate} />
+                    </div>
+                </div>
+                <div className="h-[400px] w-full bg-gradient-to-b from-transparent to-gray-50/50 dark:to-gray-900/30 rounded-3xl border border-gray-100 dark:border-gray-700/50 p-2">
+                    {loading ? <div className="h-full flex items-center justify-center"><FaSpinner className="animate-spin text-2xl text-blue-500"/></div> : 
+                    <Chart options={chartOptions} series={chartSeries} type="area" height="100%" />}
+                </div>
+            </div>
+        </motion.div>
+    );
+};
+
+// ============================================================
+// KOMPONEN SENSOR DETAIL (REALTIME ONLY)
 // ============================================================
 interface SensorDetailViewProps {
     sensorId: string;
     onBack: () => void;
+    onOpenHistory: () => void;
     isDarkMode: boolean;
     currentValue?: number | typeof NaN;
-    historicalData?: HistoricalEntryNumeric[];
+    realtimeSeries?: HistoricalEntryNumeric[];
+    phRealtimeSeries?: HistoricalEntryNumeric[];
+    voltageRealtimeSeries?: HistoricalEntryNumeric[];
     currentPhValue?: number | typeof NaN;
     currentVoltageValue?: number | typeof NaN;
-    phHistoricalData?: HistoricalEntryNumeric[];
-    voltageHistoricalData?: HistoricalEntryNumeric[];
 }
 
 const SensorDetailView: React.FC<SensorDetailViewProps> = ({
-    sensorId, onBack, isDarkMode, currentValue, historicalData,
-    currentPhValue, currentVoltageValue, phHistoricalData, voltageHistoricalData
+    sensorId, onBack, onOpenHistory, isDarkMode, currentValue, 
+    realtimeSeries, phRealtimeSeries, voltageRealtimeSeries,
+    currentPhValue, currentVoltageValue
 }) => {
     const isCombinedView = sensorId === 'ph';
 
@@ -124,37 +256,75 @@ const SensorDetailView: React.FC<SensorDetailViewProps> = ({
         };
     };
 
-    const stats1 = useMemo(() => calculateStats(isCombinedView ? phHistoricalData : historicalData), [isCombinedView, phHistoricalData, historicalData]);
-    const stats2 = useMemo(() => calculateStats(voltageHistoricalData), [voltageHistoricalData]);
+    const stats1 = useMemo(() => calculateStats(isCombinedView ? phRealtimeSeries : realtimeSeries), [isCombinedView, phRealtimeSeries, realtimeSeries]);
+    const stats2 = useMemo(() => calculateStats(voltageRealtimeSeries), [voltageRealtimeSeries]);
 
-    const categories = useMemo(() => (isCombinedView ? phHistoricalData : historicalData)?.map(d => d.time) || [], [isCombinedView, phHistoricalData, historicalData]);
+    // Generate categories for X-axis (Time)
+    const categories = useMemo(() => {
+        const data = isCombinedView ? phRealtimeSeries : realtimeSeries;
+        if (!data) return [];
+        return data.map(d => {
+            if (typeof d.time === 'number') {
+                return new Date(d.time).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            }
+            return d.time;
+        });
+    }, [isCombinedView, phRealtimeSeries, realtimeSeries]);
 
     const chartSeries = useMemo(() => {
-        if (isCombinedView && phHistoricalData && voltageHistoricalData) {
-            return [
-                { name: primarySensorDetails.label, data: phHistoricalData.map(d => d.value) },
-                { name: "Voltage", data: voltageHistoricalData.map(d => d.value) }
-            ];
-        } else if (historicalData) {
-            return [{ name: primarySensorDetails.label, data: historicalData.map(d => d.value) }];
+        const validate = (d: HistoricalEntryNumeric) => typeof d.value === 'number' && isFinite(d.value);
+
+        if (isCombinedView && phRealtimeSeries && voltageRealtimeSeries) {
+            const phData = Array.isArray(phRealtimeSeries) ? phRealtimeSeries.filter(validate).map(d => d.value) : [];
+            const voltData = Array.isArray(voltageRealtimeSeries) ? voltageRealtimeSeries.filter(validate).map(d => d.value) : [];
+            
+            const series = [];
+            if (phData.length > 0) series.push({ name: primarySensorDetails.label, data: phData });
+            if (voltData.length > 0) series.push({ name: "Voltage", data: voltData });
+            
+            return series;
+        } else if (realtimeSeries) {
+            const data = Array.isArray(realtimeSeries) ? realtimeSeries.filter(validate).map(d => d.value) : [];
+            if (data.length === 0) return [];
+            return [{ name: primarySensorDetails.label, data: data }];
         } return [];
-    }, [isCombinedView, historicalData, phHistoricalData, voltageHistoricalData, primarySensorDetails]);
+    }, [isCombinedView, realtimeSeries, phRealtimeSeries, voltageRealtimeSeries, primarySensorDetails]);
 
     const chartOptions: ApexOptions = useMemo(() => ({
-        chart: { type: 'area', background: 'transparent', toolbar: { show: false }, zoom: { enabled: false } },
+        chart: { 
+            type: 'area', 
+            background: 'transparent', 
+            toolbar: { show: false }, // No toolbar for realtime view
+            animations: { enabled: true, easing: 'linear', dynamicAnimation: { speed: 1000 } }
+        },
         colors: isCombinedView ? [primarySensorDetails.color, secondarySensorDetails?.color || '#f97316'] : [primarySensorDetails.color],
         fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 100] } },
         dataLabels: { enabled: false },
         stroke: { curve: 'smooth', width: 3 },
         grid: { borderColor: isDarkMode ? '#374151' : '#f3f4f6', strokeDashArray: 4 },
-        xaxis: { categories: categories, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280', fontSize: '10px' } }, axisBorder: { show: false }, axisTicks: { show: false } },
+        xaxis: { 
+            categories: categories,
+            labels: { 
+                style: { colors: isDarkMode ? '#9ca3af' : '#6b7280', fontSize: '10px' },
+            }, 
+            axisBorder: { show: false }, 
+            axisTicks: { show: false },
+            tooltip: { enabled: false }
+        },
         yaxis: isCombinedView ? [
-            { title: { text: "pH", style: { color: primarySensorDetails.color } }, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (v) => v.toFixed(1) } },
-            { opposite: true, title: { text: "Volt", style: { color: secondarySensorDetails?.color } }, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (v) => v.toFixed(1) } }
-        ] : { labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (v) => v.toFixed(1) } },
+            { title: { text: "pH", style: { color: primarySensorDetails.color } }, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (v) => (typeof v === 'number' ? v.toFixed(1) : '') } },
+            { opposite: true, title: { text: "Volt", style: { color: secondarySensorDetails?.color || '#f97316' } }, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (v) => (typeof v === 'number' ? v.toFixed(1) : '') } }
+        ] : { labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (v) => (typeof v === 'number' ? v.toFixed(1) : '') } },
+        noData: { text: "Menunggu data realtime...", align: 'center', verticalAlign: 'middle', style: { color: isDarkMode ? '#9ca3af' : '#6b7280' } },
         theme: { mode: isDarkMode ? 'dark' : 'light' },
-        tooltip: { theme: isDarkMode ? 'dark' : 'light', x: { show: false } }
-    }), [isCombinedView, categories, primarySensorDetails, secondarySensorDetails, isDarkMode]);
+        tooltip: { 
+            theme: isDarkMode ? 'dark' : 'light', 
+            x: { show: false },
+            y: {
+                formatter: (val: number) => (typeof val === 'number' ? val.toFixed(1) : '')
+            }
+        }
+    }), [isCombinedView, primarySensorDetails, secondarySensorDetails, isDarkMode, categories]);
 
     return (
         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="w-full max-w-5xl mx-auto">
@@ -170,6 +340,14 @@ const SensorDetailView: React.FC<SensorDetailViewProps> = ({
                         <div>
                             <h2 className="text-2xl font-bold text-gray-800 dark:text-white">{isCombinedView ? "Kualitas Air & Daya" : `Sensor ${primarySensorDetails.label}`}</h2>
                             <p className="text-sm text-gray-500 dark:text-gray-400">{primarySensorDetails.desc}</p>
+                            <div className="mt-2 flex items-center gap-2">
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-bold animate-pulse">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> LIVE
+                                </span>
+                                <button onClick={onOpenHistory} className="text-xs font-bold text-blue-500 hover:text-blue-600 underline flex items-center gap-1">
+                                    <FaRegCalendarAlt /> Lihat Riwayat Lengkap
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div className="flex items-center gap-6">
@@ -197,7 +375,7 @@ const SensorDetailView: React.FC<SensorDetailViewProps> = ({
                     ) : (
                         <div className="h-full flex items-center justify-center text-gray-400 flex-col gap-2">
                             <FaSpinner className="animate-spin text-2xl"/>
-                            <span className="text-sm">Memuat grafik...</span>
+                            <span className="text-sm">Menunggu data stream...</span>
                         </div>
                     )}
                 </div>
@@ -205,7 +383,7 @@ const SensorDetailView: React.FC<SensorDetailViewProps> = ({
                     <div className="bg-gray-50 dark:bg-gray-700/30 rounded-2xl p-5 border border-gray-100 dark:border-gray-700">
                         <div className="flex items-center gap-2 mb-4">
                             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: primarySensorDetails.color }}></span>
-                            <span className="text-sm font-bold text-gray-600 dark:text-gray-300 uppercase">Statistik {primarySensorDetails.label}</span>
+                            <span className="text-sm font-bold text-gray-600 dark:text-gray-300 uppercase">Statistik {primarySensorDetails.label} (Live)</span>
                         </div>
                         <div className="grid grid-cols-3 gap-2 text-center">
                             <div><p className="text-xs text-gray-400">Min</p><p className="text-lg font-bold text-gray-800 dark:text-white">{stats1.min}</p></div>
@@ -217,7 +395,7 @@ const SensorDetailView: React.FC<SensorDetailViewProps> = ({
                         <div className="bg-gray-50 dark:bg-gray-700/30 rounded-2xl p-5 border border-gray-100 dark:border-gray-700">
                             <div className="flex items-center gap-2 mb-4">
                                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: secondarySensorDetails.color }}></span>
-                                <span className="text-sm font-bold text-gray-600 dark:text-gray-300 uppercase">Statistik {secondarySensorDetails.label}</span>
+                                <span className="text-sm font-bold text-gray-600 dark:text-gray-300 uppercase">Statistik {secondarySensorDetails.label} (Live)</span>
                             </div>
                             <div className="grid grid-cols-3 gap-2 text-center">
                                 <div><p className="text-xs text-gray-400">Min</p><p className="text-lg font-bold text-gray-800 dark:text-white">{stats2.min}</p></div>
@@ -236,15 +414,30 @@ const SensorDetailView: React.FC<SensorDetailViewProps> = ({
 // KOMPONEN SPARKLINE CHART
 // ============================================================
 const SparklineChart = ({ data, color, isDarkMode }: { data: HistoricalEntryNumeric[], color: string, isDarkMode: boolean }) => {
+    if (!Array.isArray(data) || data.length < 2) return null;
+    
+    // Filter valid numeric values only
+    const validData = data.filter(d => typeof d.value === 'number' && isFinite(d.value));
+    if (validData.length < 2) return null;
+
     const options: ApexOptions = {
         chart: { type: 'line', sparkline: { enabled: true }, animations: { enabled: false } },
         stroke: { curve: 'smooth', width: 2, colors: [color] },
         fill: { opacity: 0 },
-        tooltip: { fixed: { enabled: false }, x: { show: false }, y: { title: { formatter: () => '' } }, marker: { show: false } },
+        tooltip: { 
+            fixed: { enabled: false }, 
+            x: { show: false }, 
+            y: { 
+                title: { formatter: () => '' },
+                formatter: (val: number) => (typeof val === 'number' ? val.toFixed(1) : '')
+            }, 
+            marker: { show: false } 
+        },
         theme: { mode: isDarkMode ? 'dark' : 'light' }
     };
-    const series = [{ data: data.slice(-10).map(d => d.value) }];
-    if (!data || data.length < 2) return null;
+    
+    const series = [{ data: validData.slice(-10).map(d => d.value) }];
+
     return (
         <div className="absolute bottom-0 left-0 right-0 h-16 opacity-30 pointer-events-none">
              {typeof window !== 'undefined' && (
@@ -266,6 +459,7 @@ const Home: React.FC = () => {
     const [ldrHistory, setLdrHistory] = useState<HistoricalEntryBoolean[]>([]);
     
     const [selectedSensor, setSelectedSensor] = useState<string | null>(null);
+    const [viewMode, setViewMode] = useState<'dashboard' | 'detail' | 'history'>('dashboard');
     const [initialLoading, setInitialLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isDarkMode, setIsDarkMode] = useState(false);
@@ -303,6 +497,7 @@ const Home: React.FC = () => {
          try {
              const socket = new WebSocket(wsUrl); ws.current = socket;
              socket.onopen = () => { setWsConnected(true); setError(null); setInitialLoading(false); };
+             socket.onerror = () => { setError("Gagal koneksi WebSocket."); setWsConnected(false); setInitialLoading(false); };
              socket.onmessage = (e) => {
                  if (ws.current !== socket) return;
                  try {
@@ -320,16 +515,33 @@ const Home: React.FC = () => {
                                 if (typeof latest.ldr === 'boolean') newLatest.ldr = latest.ldr;
                                 newLatest.updatedAt = formatTimeHM(latest.updatedAt);
                                 setSensorData(prev => ({ ...prev, ...newLatest }));
+
+                                // Append new data to history buffers for realtime charts
+                                const time = latest.updatedAt ? parseTimestamp(latest.updatedAt) : new Date().getTime();
+                                if (time > 0) {
+                                    if (typeof latest.ph === 'number') setPhHistory(prev => [...prev, { time, value: latest.ph as number }].slice(-MAX_HISTORY_LENGTH));
+                                    if (typeof latest.temperature === 'number') setTempHistory(prev => [...prev, { time, value: latest.temperature as number }].slice(-MAX_HISTORY_LENGTH));
+                                    if (typeof latest.humidity === 'number') setHumidityHistory(prev => [...prev, { time, value: latest.humidity as number }].slice(-MAX_HISTORY_LENGTH));
+                                    if (typeof latest.voltage === 'number') setVoltageHistory(prev => [...prev, { time, value: latest.voltage as number }].slice(-MAX_HISTORY_LENGTH));
+                                }
                              }
-                             const parseHist = (h: any, isBool = false) => {
-                                 if (!h?.value || !h?.timestamp) return [];
-                                 return h.timestamp.map((ts: string, i: number) => ({ time: ts, value: h.value[i] })).filter((x: any) => x.value !== null).slice(-MAX_HISTORY_LENGTH);
-                             };
-                             setPhHistory(parseHist(history?.ph));
-                             setTempHistory(parseHist(history?.temperature));
-                             setHumidityHistory(parseHist(history?.humidity));
-                             setVoltageHistory(parseHist(history?.voltage));
-                             setLdrHistory(parseHist(history?.ldr, true));
+
+                             // Update Realtime History Buffer
+                             if (history) {
+                                 const parseHist = (h: any, isBool = false) => {
+                                     if (!h?.value || !h?.timestamp) return [];
+                                     return h.timestamp.map((ts: string, i: number) => {
+                                         const t = parseTimestamp(ts);
+                                         return { time: t, value: h.value[i] };
+                                     }).filter((x: any) => typeof x.value === 'number' && isFinite(x.value) && x.time !== 0).slice(-MAX_HISTORY_LENGTH);
+                                 };
+
+                                 if (history.ph) setPhHistory(parseHist(history.ph));
+                                 if (history.temperature) setTempHistory(parseHist(history.temperature));
+                                 if (history.humidity) setHumidityHistory(parseHist(history.humidity));
+                                 if (history.voltage) setVoltageHistory(parseHist(history.voltage));
+                                 if (history.ldr) setLdrHistory(parseHist(history.ldr, true));
+                             }
                              setInitialLoading(false);
                          }
                      }
@@ -339,7 +551,15 @@ const Home: React.FC = () => {
          } catch (err) { setError("Gagal koneksi."); setWsConnected(false); }
     }, [handleLogout]);
 
-    useEffect(() => { connectWebSocket(); return () => { ws.current?.close(); }; }, [connectWebSocket]);
+    useEffect(() => {
+        connectWebSocket();
+        return () => {
+            if (ws.current) {
+                ws.current.close();
+                ws.current = null;
+            }
+        };
+    }, [connectWebSocket]);
 
     const getGreeting = () => { const h = currentTime.getHours(); return h < 11 ? "Selamat Pagi" : h < 15 ? "Selamat Siang" : h < 19 ? "Selamat Sore" : "Selamat Malam"; };
 
@@ -352,7 +572,7 @@ const Home: React.FC = () => {
             { id: "ldr", label: "Cahaya", value: sensorData.ldr ? "Gelap" : "Terang", sub: "Status", icon: sensorData.ldr ? <FaMoon /> : <FaSun />, color: sensorData.ldr ? "text-purple-500" : "text-yellow-500", hexColor: sensorData.ldr ? "#a855f7" : "#eab308", bg: "from-yellow-500/10 to-yellow-500/5", border: "", clickable: false, history: [] },
         ];
         return sensors.map((s) => (
-            <motion.div key={s.id} whileHover={s.clickable ? { y: -5 } : {}} whileTap={s.clickable ? { scale: 0.98 } : {}} onClick={() => s.clickable && setSelectedSensor(s.id)} className={`group relative overflow-hidden rounded-[2rem] bg-white/70 dark:bg-gray-800/60 backdrop-blur-xl border border-white/50 dark:border-gray-700/50 p-6 transition-all hover:shadow-2xl ${s.clickable ? 'cursor-pointer' : ''}`}>
+            <motion.div key={s.id} whileHover={s.clickable ? { y: -5 } : {}} whileTap={s.clickable ? { scale: 0.98 } : {}} onClick={() => { if(s.clickable) { setSelectedSensor(s.id); setViewMode('detail'); } }} className={`group relative overflow-hidden rounded-[2rem] bg-white/70 dark:bg-gray-800/60 backdrop-blur-xl border border-white/50 dark:border-gray-700/50 p-6 transition-all hover:shadow-2xl ${s.clickable ? 'cursor-pointer' : ''}`}>
                 <div className={`absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-to-br ${s.bg} blur-2xl transition-all group-hover:scale-150`}></div>
                 {s.clickable && s.history && s.history.length > 1 && (<SparklineChart data={s.history} color={s.hexColor} isDarkMode={isDarkMode} />)}
                 <div className="relative z-10 flex flex-col h-full justify-between">
@@ -395,11 +615,34 @@ const Home: React.FC = () => {
                         </motion.div>
                     )}
 
-                    {!initialLoading && selectedSensor && (
-                        <SensorDetailView key="detail" sensorId={selectedSensor} onBack={() => setSelectedSensor(null)} isDarkMode={isDarkMode} currentValue={sensorData[selectedSensor as keyof SensorData] as number} historicalData={selectedSensor === 'temperature' ? tempHistory : humidityHistory} currentPhValue={sensorData.ph} currentVoltageValue={sensorData.voltage} phHistoricalData={phHistory} voltageHistoricalData={voltageHistory} />
+                    {!initialLoading && viewMode === 'detail' && selectedSensor && (
+                        <SensorDetailView 
+                            key="detail" 
+                            sensorId={selectedSensor} 
+                            onBack={() => { setViewMode('dashboard'); setSelectedSensor(null); }}
+                            onOpenHistory={() => setViewMode('history')}
+                            isDarkMode={isDarkMode} 
+                            currentValue={sensorData[selectedSensor as keyof SensorData] as number} 
+                            
+                            realtimeSeries={selectedSensor === 'temperature' ? tempHistory : humidityHistory} 
+                            phRealtimeSeries={phHistory}
+                            voltageRealtimeSeries={voltageHistory}
+
+                            currentPhValue={sensorData.ph} 
+                            currentVoltageValue={sensorData.voltage} 
+                        />
                     )}
 
-                    {!initialLoading && !selectedSensor && !error && (
+                    {!initialLoading && viewMode === 'history' && selectedSensor && (
+                        <HistoryView 
+                            key="history"
+                            sensorId={selectedSensor}
+                            onBack={() => setViewMode('detail')}
+                            isDarkMode={isDarkMode}
+                        />
+                    )}
+
+                    {!initialLoading && viewMode === 'dashboard' && !error && (
                         <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }}>
                             <div className="flex flex-col md:flex-row justify-between items-end mb-10 gap-4">
                                 <div>
