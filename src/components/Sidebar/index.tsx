@@ -17,7 +17,7 @@ import {
   MdSettingsSuggest,
   MdChevronRight // Ikon panah baru
 } from "react-icons/md";
-import { FaHandshake, FaTools, FaLightbulb } from "react-icons/fa";
+import { FaHandshake, FaTools, FaLightbulb, FaBolt } from "react-icons/fa";
 import { TbDeviceAnalytics } from "react-icons/tb";
 import { GiWateringCan } from "react-icons/gi";
 import { motion, AnimatePresence } from "framer-motion";
@@ -45,6 +45,7 @@ const menuGroups = [
     menuItems: [
       { icon: <MdSpaceDashboard size={22} />, label: "Home", route: "/dashboard", isAdmin: false },
       { icon: <FaLightbulb size={20} />, label: "Light Control", route: "/dashboard/light-control", isAdmin: false },
+      { icon: <FaBolt size={20} />, label: "Power Monitor", route: "/dashboard/power", isAdmin: false },
       // { icon: <GiWateringCan size={22} />, label: "Smart Watering", route: "/dashboard/smartwatering", isAdmin: true },
       { icon: <MdSettingsSuggest size={22} />, label: "Output Setting", route: "/dashboard/output", isAdmin: false },
     ],
