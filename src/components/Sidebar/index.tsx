@@ -48,6 +48,7 @@ const menuGroups = [
       { icon: <FaBolt size={20} />, label: "Power Monitor", route: "/dashboard/power", isAdmin: false },
       // { icon: <GiWateringCan size={22} />, label: "Smart Watering", route: "/dashboard/smartwatering", isAdmin: true },
       { icon: <MdSettingsSuggest size={22} />, label: "Output Setting", route: "/dashboard/output", isAdmin: false },
+      { icon: <MdDisplaySettings size={22} />, label: "PLC Setting", route: "/dashboard/plc-setting", isAdmin: false },
     ],
   },
   {
