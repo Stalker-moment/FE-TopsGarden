@@ -81,6 +81,29 @@ const PowerDashboard: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   
+  // Max Power Limit for Load LCD
+  const [maxPowerLimit, setMaxPowerLimit] = useState<number | ''>(450);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("pzem_max_power");
+    if (saved) setMaxPowerLimit(Number(saved));
+  }, []);
+
+  const handleMaxPowerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value === '' ? '' : Number(e.target.value);
+    setMaxPowerLimit(val);
+    if (val !== '') {
+      localStorage.setItem("pzem_max_power", val.toString());
+    }
+  };
+
+  // Chart toggles
+  const [activeMetrics, setActiveMetrics] = useState({
+    power: true,
+    voltage: false,
+    current: false
+  });
+
   // WebSocket Reference
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -257,16 +280,56 @@ const PowerDashboard: React.FC = () => {
     updatedAt: new Date().toISOString()
   };
 
-  // Prepare Chart Series from chartData (Live Load Trend)
-  // chartData is Array of PzemLog: { createdAt, power, ... }
-  // We want to show Power (W) trend
-  const powerTrendSeries = [{
-    name: "Active Power",
-    data: chartData.map(d => ({
-      x: new Date(d.createdAt).getTime(),
-      y: d.power
-    }))
-  }];
+  // Prepare dynamic Chart Series and Y-Axis for Live Load Trend
+  const powerTrendSeries: any[] = [];
+  const powerTrendColors: string[] = [];
+  const powerTrendYAxis: any[] = [];
+
+  if (activeMetrics.power) {
+    powerTrendSeries.push({
+      name: "Power (W)",
+      data: chartData.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.power }))
+    });
+    powerTrendColors.push('#f59e0b'); // Yellow
+    powerTrendYAxis.push({
+      seriesName: 'Power (W)',
+      show: true,
+      labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (val: number) => val.toFixed(1) }
+    });
+  }
+
+  if (activeMetrics.voltage) {
+    powerTrendSeries.push({
+      name: "Voltage (V)",
+      data: chartData.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.voltage }))
+    });
+    powerTrendColors.push('#3b82f6'); // Blue
+    powerTrendYAxis.push({
+      seriesName: 'Voltage (V)',
+      opposite: powerTrendYAxis.length > 0, // Put on right if power is active
+      show: true,
+      labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (val: number) => val.toFixed(1) }
+    });
+  }
+
+  if (activeMetrics.current) {
+    powerTrendSeries.push({
+      name: "Current (A)",
+      data: chartData.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.current }))
+    });
+    powerTrendColors.push('#ef4444'); // Red
+    powerTrendYAxis.push({
+      seriesName: 'Current (A)',
+      opposite: powerTrendYAxis.length > 0, // Put on right if another axis is active
+      show: true,
+      labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (val: number) => val.toFixed(2) }
+    });
+  }
+
+  // Force at least one invisible axis if none selected to avoid ApexCharts crash
+  if (powerTrendYAxis.length === 0) {
+    powerTrendYAxis.push({ show: false });
+  }
 
   // For Energy Chart (Monthly), backend doesn't give monthly summary yet in the docs provided.
   // The docs mention "Grafik "Live Load Trend" via GET /:id/chart".
@@ -308,10 +371,11 @@ const PowerDashboard: React.FC = () => {
   const powerTrendOptions: ApexOptions = {
     chart: { type: 'area', sparkline: { enabled: false }, toolbar: { show: false }, background: 'transparent', animations: { enabled: true } },
     stroke: { curve: 'smooth', width: 2 },
+    legend: { show: false }, // We use custom toggles above chart
     // Disable dataLabels to avoid clutter
     dataLabels: { enabled: false },
     fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 100] } },
-    colors: ['#f59e0b'],
+    colors: powerTrendColors,
     grid: { borderColor: isDarkMode ? '#334155' : '#e2e8f0', strokeDashArray: 4 },
     xaxis: {
       type: 'datetime',
@@ -325,23 +389,12 @@ const PowerDashboard: React.FC = () => {
          enabled: false // Disable x-axis tooltip since we use the main tooltip
       }
     },
-    yaxis: { 
-      show: true, 
-      labels: { 
-        style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' },
-        formatter: (val) => val.toFixed(1) // Limit decimals on Y-axis
-      } 
-    },
+    yaxis: powerTrendYAxis,
     tooltip: { 
       theme: isDarkMode ? 'dark' : 'light', 
       x: { 
         format: 'HH:mm:ss',
         formatter: (val) => {
-             // Force conversion to WIB (UTC+7) explicitly if needed, 
-             // or just rely on 'datetimeUTC: false' which uses browser local time (if browser is in WIB).
-             // To be safe for Indonesia users regardless of device setting, we can offset it manually or utilize standard library if available.
-             // Simple approach: ApexCharts with type='datetime' and datetimeUTC: false usually handles local time.
-             // If manual offset needed:
              return new Date(val).toLocaleTimeString('id-ID', { 
                timeZone: 'Asia/Jakarta',
                hour: '2-digit', 
@@ -352,7 +405,14 @@ const PowerDashboard: React.FC = () => {
         }
       },
       y: {
-        formatter: (val) => val.toFixed(1) + " W" // Limit decimals in tooltip
+        formatter: (val, { seriesIndex, w }) => {
+          if (!w || !w.globals || !w.globals.seriesNames) return val.toFixed(1);
+          const name = w.globals.seriesNames[seriesIndex] || "";
+          if (name.includes('Power')) return val.toFixed(1) + " W";
+          if (name.includes('Voltage')) return val.toFixed(1) + " V";
+          if (name.includes('Current')) return val.toFixed(2) + " A";
+          return val.toString();
+        }
       }
     },
     theme: { mode: isDarkMode ? 'dark' : 'light' }
@@ -475,6 +535,86 @@ const PowerDashboard: React.FC = () => {
           />
         </div>
 
+        {/* Load Percentage Bar (LCD physical reference) */}
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8 p-4 md:px-6 md:py-5 rounded-[1.5rem] bg-white/70 dark:bg-gray-900 border border-white/50 dark:border-gray-800 text-gray-800 dark:text-white shadow-xl relative overflow-hidden backdrop-blur-xl"
+        >
+          {/* LCD Glow Effect */}
+          <div className="absolute inset-0 bg-blue-500/5 mix-blend-overlay pointer-events-none"></div>
+          <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-[80px]"></div>
+          
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6 relative z-10">
+            {/* Percentage Text Area */}
+            <div className="flex items-center gap-3 w-full md:w-auto md:min-w-[160px]">
+              <div className="p-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-blue-500 dark:text-blue-400 flex items-center justify-center">
+                <FaTachometerAlt size={20} />
+              </div>
+              <div className="flex flex-col justify-center">
+                <span className="text-[10px] sm:text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest leading-none mb-1">Load %</span>
+                <div className="text-2xl font-black text-gray-800 dark:text-white flex items-baseline gap-1 leading-none">
+                  {((displayData.power / (typeof maxPowerLimit === 'number' && maxPowerLimit > 0 ? maxPowerLimit : 1)) * 100).toFixed(1)}<span className="text-xl text-gray-500">%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* LCD Progress Bar Area */}
+            <div className="flex-1 w-full space-y-2">
+              <div className="flex justify-between items-end text-xs sm:text-sm">
+                <span className="text-gray-600 dark:text-gray-400 font-mono font-semibold tracking-wider">0W</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-600 dark:text-gray-400 font-mono tracking-wider">LIMIT:</span>
+                  <input
+                    type="number"
+                    value={maxPowerLimit}
+                    onChange={handleMaxPowerChange}
+                    className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-2 py-0.5 w-16 sm:w-20 text-center font-mono text-blue-600 dark:text-blue-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors text-xs sm:text-sm"
+                  />
+                  <span className="text-gray-600 dark:text-gray-400 font-mono tracking-wider">W</span>
+                </div>
+              </div>
+
+              {/* Smooth Continuous Progress Bar */}
+              <div className="h-6 sm:h-7 w-full bg-gray-200 dark:bg-gray-950/90 p-[4px] border border-gray-300 dark:border-gray-800/80 shadow-[inset_0_2px_10px_rgba(0,0,0,0.1)] dark:shadow-[inset_0_2px_10px_rgba(0,0,0,0.8)] rounded-[4px] relative overflow-hidden backdrop-blur-sm transform -skew-x-[12deg] ml-1">
+                {/* Subtle digital grid overlay */}
+                <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNMCA0TDAgMEw0IDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsIDI1NSwgMjU1LCAwLjAzKSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9zdmc+')] opacity-20 dark:opacity-40 pointer-events-none z-20"></div>
+                
+                {(() => {
+                  const safeLimit = typeof maxPowerLimit === 'number' && maxPowerLimit > 0 ? maxPowerLimit : 1;
+                  let fillPct = (displayData.power / safeLimit) * 100;
+                  fillPct = Math.min(100, Math.max(0, fillPct));
+                  
+                  let fillColors = 'from-blue-600 via-blue-500 to-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.5)]';
+                  let tipColor = 'bg-blue-300';
+                  if (fillPct >= 80) {
+                    fillColors = 'from-red-600 via-red-500 to-red-400 shadow-[0_0_15px_rgba(239,68,68,0.5)]';
+                    tipColor = 'bg-red-300';
+                  } else if (fillPct >= 60) {
+                    fillColors = 'from-yellow-600 via-yellow-500 to-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]';
+                    tipColor = 'bg-yellow-200';
+                  }
+
+                  return (
+                     <div className="relative w-full h-full rounded-[2px] overflow-hidden z-10 bg-white/50 dark:bg-gray-900/50">
+                        {/* The animated continuous fill */}
+                        <div 
+                          className={`absolute top-0 left-0 h-full bg-gradient-to-r ${fillColors} transition-all duration-[800ms] ease-out`}
+                          style={{ width: `${fillPct}%` }}
+                        >
+                          {/* Inner light gradient for a 3D glass effect */}
+                          <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/60 dark:from-white/30 to-transparent"></div>
+                          {/* Highlight tip at the end of the progress bar */}
+                          <div className={`absolute top-0 right-0 bottom-0 w-1 ${tipColor} opacity-90 shadow-[0_0_8px_rgba(255,255,255,1)]`}></div>
+                        </div>
+                     </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
         {/* Main Charts Section */}
         <div className="grid lg:grid-cols-3 gap-8 mb-8">
           
@@ -509,11 +649,35 @@ const PowerDashboard: React.FC = () => {
             className="lg:col-span-1 rounded-[2rem] bg-white/60 dark:bg-gradient-to-br dark:from-gray-900 dark:to-gray-800 backdrop-blur-md border border-white/50 dark:border-gray-700 p-6 md:p-8 shadow-xl text-gray-800 dark:text-white relative overflow-hidden"
           >
             <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-yellow-500/20 rounded-full blur-2xl"></div>
-            <h3 className="text-xl font-bold flex items-center gap-2 mb-2 relative z-10">
-              <FaChartLine className="text-yellow-500 dark:text-yellow-400"/> 
-              Live Load Trend
-            </h3>
-            <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 relative z-10">Real-time active power fluctuations.</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4 relative z-10">
+              <div>
+                <h3 className="text-xl font-bold flex items-center gap-2 mb-1">
+                  <FaChartLine className="text-yellow-500 dark:text-yellow-400"/> 
+                  Live Trend
+                </h3>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Real-time fluctuations.</p>
+              </div>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setActiveMetrics(p => ({ ...p, power: !p.power }))}
+                  className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors border ${activeMetrics.power ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-700' : 'bg-transparent text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                >
+                  Power
+                </button>
+                <button 
+                  onClick={() => setActiveMetrics(p => ({ ...p, voltage: !p.voltage }))}
+                  className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors border ${activeMetrics.voltage ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-700' : 'bg-transparent text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                >
+                  Voltage
+                </button>
+                <button 
+                  onClick={() => setActiveMetrics(p => ({ ...p, current: !p.current }))}
+                  className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors border ${activeMetrics.current ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-300 dark:border-red-700' : 'bg-transparent text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                >
+                  Current
+                </button>
+              </div>
+            </div>
             
             <div className="h-[200px] -mx-4 relative z-10">
                <ReactApexChart options={powerTrendOptions} series={powerTrendSeries} type="area" height="100%" />
