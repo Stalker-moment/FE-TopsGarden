@@ -131,9 +131,7 @@ export default function SigninWithPassword() {
 
       {/* --- NOTIFICATION --- */}
       {notification && (
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-sm px-4">
-           <Notification message={notification.message} type={notification.type} onClose={() => setNotification(null)} />
-        </div>
+        <Notification message={notification.message} type={notification.type} onClose={() => setNotification(null)} />
       )}
 
       {/* --- MAIN CARD CONTAINER --- */}

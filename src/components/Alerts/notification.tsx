@@ -47,12 +47,12 @@ const Notification: React.FC<NotificationProps> = ({ message, type, onClose }) =
   const progressColor = type === 'success' ? 'bg-green-300' : 'bg-red-300';
 
   return (
-    <div className={`fixed bottom-4 right-4 w-80 p-4 text-white rounded shadow-lg ${bgColor} z-50`}>
-      <div className="mb-2 text-lg font-medium">{message}</div>
+    <div className={`fixed top-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm p-4 text-white rounded-xl shadow-2xl ${bgColor} z-[9999]`}>
+      <div className="mb-2 text-sm md:text-base font-semibold">{message}</div>
       {/* Progress Bar */}
-      <div className="w-full h-2 bg-gray-300 rounded overflow-hidden">
+      <div className="w-full h-1.5 bg-black/20 rounded-full overflow-hidden mt-2">
         <div
-          className={`${progressColor} h-full`}
+          className={`${progressColor} h-full rounded-full`}
           style={{
             width: `${progress}%`,
             transition: 'width 50ms linear',

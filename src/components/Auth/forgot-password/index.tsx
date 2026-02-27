@@ -76,7 +76,7 @@ export default function ForgotPassword() {
 
     try {
       // Ganti URL sesuai kebutuhan (contoh menggunakan variable env atau hardcoded path relative)
-      const response = await fetch(`${HTTPSAPIURL || ''}/api/forgot/request`, {
+      const response = await fetch(`/api/forgot/request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
@@ -111,9 +111,7 @@ export default function ForgotPassword() {
 
       {/* --- NOTIFICATION --- */}
       {notification && (
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-sm px-4">
-           <Notification message={notification.message} type={notification.type} onClose={() => setNotification(null)} />
-        </div>
+        <Notification message={notification.message} type={notification.type} onClose={() => setNotification(null)} />
       )}
 
       {/* --- MAIN CARD --- */}
