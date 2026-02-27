@@ -169,7 +169,7 @@ const PowerDashboard: React.FC = () => {
       try {
         const message = JSON.parse(event.data);
         // Message format: Array of devices with data
-        // [ { id, name, ..., data: { voltage, ... } }, ... ]
+        // [ { id, name, ..., data: { voltage, ... }, logs: [], chart: [] }, ... ]
         
         if (Array.isArray(message)) {
           // Find data for currently selected device
@@ -183,8 +183,13 @@ const PowerDashboard: React.FC = () => {
             });
             setStatus("ONLINE");
             
-            // Optionally update logs or chart in realtime here if backend doesn't push full history
-            // For now, we rely on WS for realtime cards
+            // UPDATE: Realtime logs and chart data from WebSocket
+            if (currentDeviceData.logs) {
+              setRecentLogs(currentDeviceData.logs);
+            }
+            if (currentDeviceData.chart) {
+              setChartData(currentDeviceData.chart);
+            }
           }
         }
       } catch (e) {
@@ -501,27 +506,27 @@ const PowerDashboard: React.FC = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="lg:col-span-1 rounded-[2rem] bg-gradient-to-br from-gray-900 to-gray-800 p-6 md:p-8 shadow-xl text-white relative overflow-hidden"
+            className="lg:col-span-1 rounded-[2rem] bg-white/60 dark:bg-gradient-to-br dark:from-gray-900 dark:to-gray-800 backdrop-blur-md border border-white/50 dark:border-gray-700 p-6 md:p-8 shadow-xl text-gray-800 dark:text-white relative overflow-hidden"
           >
             <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-yellow-500/20 rounded-full blur-2xl"></div>
             <h3 className="text-xl font-bold flex items-center gap-2 mb-2 relative z-10">
-              <FaChartLine className="text-yellow-400"/> 
+              <FaChartLine className="text-yellow-500 dark:text-yellow-400"/> 
               Live Load Trend
             </h3>
-            <p className="text-gray-400 text-sm mb-6 relative z-10">Real-time active power fluctuations.</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 relative z-10">Real-time active power fluctuations.</p>
             
             <div className="h-[200px] -mx-4 relative z-10">
                <ReactApexChart options={powerTrendOptions} series={powerTrendSeries} type="area" height="100%" />
             </div>
 
             <div className="mt-6 space-y-4 relative z-10">
-              <div className="flex justify-between items-center border-b border-gray-700 pb-2">
-                <span className="text-gray-400 text-sm">Current Load</span>
-                <span className="font-bold text-lg">{displayData.power.toFixed(1)} W</span>
+              <div className="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2">
+                <span className="text-gray-500 dark:text-gray-400 text-sm">Current Load</span>
+                <span className="font-bold text-lg text-gray-800 dark:text-white">{displayData.power.toFixed(1)} W</span>
               </div>
               <div className="flex justify-between items-center">
-                 <span className="text-gray-400 text-sm">Status</span>
-                 <span className={`font-bold text-sm px-2 py-1 rounded ${status === "ONLINE" ? "bg-green-900/30 text-green-400" : "bg-gray-700 text-gray-400"}`}>
+                 <span className="text-gray-500 dark:text-gray-400 text-sm">Status</span>
+                 <span className={`font-bold text-sm px-2 py-1 rounded ${status === "ONLINE" ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400"}`}>
                     {status}
                  </span>
               </div>
