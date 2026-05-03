@@ -467,3 +467,44 @@ input[type="search"]::-webkit-search-cancel-button {
 .custom-gradient-1 {
     background-image: linear-gradient(145deg, #EEF 0%, #FFF8FC 100%);;
 }
+
+/* ── Minimalist Scrollbar ─────────────────────────────── */
+
+/* Webkit (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(156, 163, 175, 0.3); /* gray-400 / 30% */
+    border-radius: 999px;
+    transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(156, 163, 175, 0.6);
+}
+
+/* Dark mode */
+.dark ::-webkit-scrollbar-thumb {
+    background: rgba(75, 85, 99, 0.4); /* gray-600 / 40% */
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+    background: rgba(107, 114, 128, 0.7);
+}
+
+/* Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
+}
+
+.dark * {
+    scrollbar-color: rgba(75, 85, 99, 0.4) transparent;
+}
