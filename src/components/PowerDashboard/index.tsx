@@ -339,34 +339,9 @@ const PowerDashboard: React.FC = () => {
   // I'll comment out the Monthly Chart data or leave it static for now as "Coming Soon" or aggregate if possible.
   // Let's just use a dummy or the total energy as a single bar.
   
-  const energyChartOptions: ApexOptions = {
-    chart: { type: 'bar', toolbar: { show: false }, background: 'transparent' },
-    colors: ['#22c55e'],
-    plotOptions: {
-      bar: { borderRadius: 4, columnWidth: '60%', dataLabels: { position: 'top' } }
-    },
-    dataLabels: {
-      enabled: true,
-      formatter: (val) => val + " kWh",
-      offsetY: -20,
-      style: { fontSize: '10px', colors: [isDarkMode ? '#cbd5e1' : '#334155'] }
-    },
-    grid: { borderColor: isDarkMode ? '#334155' : '#e2e8f0', strokeDashArray: 4 },
-    xaxis: {
-      categories: ['Current Total'], 
-      labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' } },
-      axisBorder: { show: false },
-      axisTicks: { show: false }
-    },
-    yaxis: {
-      labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' } },
-      title: { text: "kWh", style: { color: isDarkMode ? '#9ca3af' : '#6b7280' } }
-    },
-    tooltip: { theme: isDarkMode ? 'dark' : 'light' },
-    theme: { mode: isDarkMode ? 'dark' : 'light' }
-  };
-
-  const energySeries = [{ name: 'Total Energy', data: [displayData.energy] }];
+  // Energy usage derived stats
+  const estimatedCost = displayData.energy * 1444.70;
+  const co2Saved = (displayData.energy * 0.85).toFixed(3); // kg CO2 equivalent
 
   const powerTrendOptions: ApexOptions = {
     chart: { type: 'area', sparkline: { enabled: false }, toolbar: { show: false }, background: 'transparent', animations: { enabled: true } },
@@ -618,23 +593,84 @@ const PowerDashboard: React.FC = () => {
         {/* Main Charts Section */}
         <div className="grid lg:grid-cols-3 gap-8 mb-8">
           
-          {/* Daily Consumption Chart */}
+          {/* Energy Usage — Hero Stat */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="lg:col-span-2 rounded-[2rem] bg-white/60 dark:bg-gray-800/60 backdrop-blur-md border border-white/50 dark:border-gray-700 p-6 md:p-8 shadow-lg"
+            className="lg:col-span-2 rounded-[2rem] bg-white/60 dark:bg-gray-800/60 backdrop-blur-md border border-white/50 dark:border-gray-700 p-6 md:p-8 shadow-lg overflow-hidden relative"
           >
+            {/* Background glow blobs */}
+            <div className="absolute -top-8 -right-8 w-48 h-48 bg-green-400/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-emerald-400/10 rounded-full blur-3xl pointer-events-none" />
+
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-bold flex items-center gap-2">
                 <FaCalendarAlt className="text-green-500"/> 
                 Energy Usage
               </h3>
+              <span className="text-xs px-3 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-semibold border border-green-200 dark:border-green-800">
+                Accumulated
+              </span>
             </div>
-            <div className="h-[300px] w-full">
-              <ReactApexChart options={energyChartOptions} series={energySeries} type="bar" height="100%" />
+
+            {/* Hero + Stats Layout */}
+            <div className="flex flex-col md:flex-row gap-6 items-stretch">
+
+              {/* Hero kWh Display */}
+              <div className="flex-1 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 p-6 flex flex-col justify-between relative overflow-hidden shadow-lg shadow-green-500/20">
+                {/* inner shimmer */}
+                <div className="absolute top-0 left-0 right-0 h-1/2 bg-white/10 rounded-t-2xl" />
+                <div className="absolute -bottom-6 -right-6 w-28 h-28 bg-white/10 rounded-full" />
+                <div className="relative z-10">
+                  <p className="text-green-100 text-sm font-semibold uppercase tracking-widest mb-3">Total Consumed</p>
+                  <div className="flex items-end gap-2">
+                    <span className="text-5xl md:text-6xl font-black text-white leading-none tabular-nums">
+                      {displayData.energy.toFixed(3)}
+                    </span>
+                    <span className="text-2xl font-semibold text-green-200 mb-1">kWh</span>
+                  </div>
+                  <p className="text-green-200 text-xs mt-3 font-medium">
+                    Since last reset
+                  </p>
+                </div>
+                <div className="relative z-10 mt-6 pt-4 border-t border-white/20">
+                  <p className="text-green-100 text-xs uppercase tracking-wider mb-1">Estimated Cost</p>
+                  <p className="text-white font-black text-xl">
+                    Rp {estimatedCost.toLocaleString('id-ID', { maximumFractionDigits: 0 })}
+                  </p>
+                  <p className="text-green-200 text-xs mt-0.5">@ Rp 1,444/kWh (PLN)</p>
+                </div>
+              </div>
+
+              {/* Side Stats */}
+              <div className="flex flex-col gap-4 md:w-48 lg:w-52">
+                {/* CO₂ */}
+                <div className="flex-1 rounded-2xl bg-gradient-to-br from-teal-50 to-cyan-50 dark:from-teal-900/20 dark:to-cyan-900/20 border border-teal-200 dark:border-teal-800/50 p-4 flex flex-col justify-between">
+                  <span className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wide">CO₂ Emission</span>
+                  <div>
+                    <span className="text-3xl font-black text-teal-700 dark:text-teal-300">{co2Saved}</span>
+                    <span className="text-sm text-teal-500 ml-1">kg</span>
+                  </div>
+                  <span className="text-xs text-teal-500 dark:text-teal-500">CO₂ equivalent</span>
+                </div>
+
+                {/* Avg Power */}
+                <div className="flex-1 rounded-2xl bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 border border-violet-200 dark:border-violet-800/50 p-4 flex flex-col justify-between">
+                  <span className="text-xs font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wide">Avg Power</span>
+                  <div>
+                    <span className="text-3xl font-black text-violet-700 dark:text-violet-300">
+                      {chartData.length > 0 ? (chartData.reduce((s, d) => s + d.power, 0) / chartData.length).toFixed(1) : displayData.power.toFixed(1)}
+                    </span>
+                    <span className="text-sm text-violet-500 ml-1">W</span>
+                  </div>
+                  <span className="text-xs text-violet-500">recent average</span>
+                </div>
+              </div>
             </div>
-            <div className="mt-4 p-4 rounded-xl bg-orange-50 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-800/30 flex items-start gap-3">
-              <FaExclamationCircle className="text-orange-500 mt-1 shrink-0" />
+
+            {/* Note */}
+            <div className="mt-5 p-3 rounded-xl bg-orange-50 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-800/30 flex items-start gap-3">
+              <FaExclamationCircle className="text-orange-500 mt-0.5 shrink-0" />
               <p className="text-sm text-orange-700 dark:text-orange-300">
                 <strong>Note:</strong> Data usage accumulates until manually reset or configured auto-reset.
               </p>
@@ -704,41 +740,95 @@ const PowerDashboard: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="rounded-[2rem] bg-white/60 dark:bg-gray-800/60 backdrop-blur-md border border-white/50 dark:border-gray-700 p-6 md:p-8 shadow-lg"
+          className="rounded-[2rem] bg-white/60 dark:bg-gray-800/60 backdrop-blur-md border border-white/50 dark:border-gray-700 overflow-hidden shadow-lg"
         >
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-xl font-bold flex items-center gap-2">
-              <FaHistory className="text-blue-500"/> 
+          {/* Table Header Banner */}
+          <div className="px-6 md:px-8 py-5 bg-gradient-to-r from-blue-600/10 via-indigo-600/5 to-transparent border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <h3 className="text-xl font-bold flex items-center gap-2 text-gray-800 dark:text-white">
+              <span className="p-2 rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400">
+                <FaHistory size={14}/>
+              </span>
               Recent Logs
             </h3>
-            {/* <button className="text-sm font-semibold text-blue-500 hover:underline">View All History</button> */}
+            <span className="text-xs font-semibold px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+              {recentLogs.length} entries
+            </span>
           </div>
+
           <div className="overflow-x-auto">
-             <table className="w-full text-left border-collapse">
+             <table className="w-full text-left">
                 <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 text-sm uppercase tracking-wider">
-                    <th className="py-3 px-4 font-semibold">Time</th>
-                    <th className="py-3 px-4 font-semibold">Voltage (V)</th>
-                    <th className="py-3 px-4 font-semibold">Current (A)</th>
-                    <th className="py-3 px-4 font-semibold">Power (W)</th>
-                    <th className="py-3 px-4 font-semibold">Energy (Total kWh)</th>
+                  <tr className="bg-gray-50/80 dark:bg-gray-900/40 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-widest">
+                    <th className="py-3 px-5 font-bold">Time</th>
+                    <th className="py-3 px-5 font-bold">Voltage</th>
+                    <th className="py-3 px-5 font-bold">Current</th>
+                    <th className="py-3 px-5 font-bold">Power</th>
+                    <th className="py-3 px-5 font-bold">Energy</th>
                   </tr>
                 </thead>
-                <tbody className="text-sm cursor-default">
+                <tbody className="text-sm cursor-default divide-y divide-gray-100 dark:divide-gray-700/50">
                   {recentLogs.length > 0 ? (
-                    recentLogs.map((log) => (
-                        <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors border-b border-gray-100 dark:border-gray-700/50 last:border-0">
-                        <td className="py-3 px-4 font-medium">{new Date(log.createdAt).toLocaleString()}</td>
-                        <td className="py-3 px-4">{log.voltage.toFixed(1)}</td>
-                        <td className="py-3 px-4">{log.current.toFixed(2)}</td>
-                        <td className="py-3 px-4">{log.power.toFixed(1)}</td>
-                        <td className="py-3 px-4">{log.energy.toFixed(3)}</td>
+                    recentLogs.map((log, idx) => {
+                      const isHighPower = log.power > 100;
+                      const isMidPower = log.power > 30;
+                      return (
+                        <tr 
+                          key={log.id} 
+                          className={`group transition-colors duration-150 ${
+                            idx % 2 === 0 
+                              ? 'bg-white/40 dark:bg-transparent' 
+                              : 'bg-gray-50/60 dark:bg-gray-900/20'
+                          } hover:bg-blue-50/60 dark:hover:bg-blue-900/10`}
+                        >
+                          <td className="py-3.5 px-5">
+                            <span className="font-mono text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-lg">
+                              {new Date(log.createdAt).toLocaleString('id-ID', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-5">
+                            <span className="inline-flex items-center gap-1.5 font-semibold text-blue-700 dark:text-blue-300">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"/>
+                              {log.voltage.toFixed(1)}
+                              <span className="text-xs font-normal text-gray-400">V</span>
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-5">
+                            <span className="inline-flex items-center gap-1.5 font-semibold text-red-600 dark:text-red-400">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"/>
+                              {log.current.toFixed(2)}
+                              <span className="text-xs font-normal text-gray-400">A</span>
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-5">
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
+                              isHighPower 
+                                ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800'
+                                : isMidPower 
+                                  ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800'
+                                  : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800'
+                            }`}>
+                              {log.power.toFixed(1)} W
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-5">
+                            <span className="font-mono font-semibold text-violet-700 dark:text-violet-300">
+                              {log.energy.toFixed(3)}
+                              <span className="text-xs font-normal text-gray-400 ml-1">kWh</span>
+                            </span>
+                          </td>
                         </tr>
-                    ))
+                      );
+                    })
                   ) : (
-                      <tr>
-                          <td colSpan={5} className="py-4 text-center text-gray-500">No logs available</td>
-                      </tr>
+                    <tr>
+                      <td colSpan={5} className="py-12 text-center">
+                        <div className="flex flex-col items-center gap-2 text-gray-400 dark:text-gray-600">
+                          <FaHistory size={28} className="opacity-30" />
+                          <p className="text-sm font-medium">No logs available yet</p>
+                          <p className="text-xs">Logs will appear when the device sends data</p>
+                        </div>
+                      </td>
+                    </tr>
                   )}
                 </tbody>
              </table>
