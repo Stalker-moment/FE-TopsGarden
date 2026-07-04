@@ -569,14 +569,14 @@ const PowerDashboard: React.FC = () => {
   }), [usageChartOptions, usageView]);
 
   // Fullscreen Trend Options
-  const fullscreenTrendOptions: ApexOptions = useMemo(() => ({
+  const fullscreenTrendOptions: ApexOptions = {
     ...powerTrendOptions,
     chart: {
       ...powerTrendOptions.chart,
       toolbar: { show: true, tools: { download: true, selection: true, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } }
     },
     theme: { mode: 'dark' }
-  }), [powerTrendOptions]);
+  };
 
 
   // Battery color helper
@@ -1364,7 +1364,7 @@ const PowerDashboard: React.FC = () => {
                     </h2>
                     <p className="text-xs text-gray-400 hidden sm:block">
                       {fullscreenChart === "usage" 
-                        ? `Total: ${usageSummary.totalKwh.toFixed(3)} kWh (${costFormat(usageSummary.estimatedCost)})`
+                        ? `Total: ${usageSummary.total.toFixed(3)} kWh (Rp ${usageSummary.cost.toLocaleString('id-ID')})`
                         : `Current Load: ${displayData.power.toFixed(1)} W · Voltage: ${displayData.voltage.toFixed(1)} V`
                       }
                     </p>
