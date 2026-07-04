@@ -463,16 +463,17 @@ const PowerDashboard: React.FC = () => {
     yaxis: {
       labels: {
         style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' },
-        formatter: (val: number) => val.toFixed(2) + " kWh"
+        formatter: (val: number) => usageView === "minutely" ? `${val.toFixed(1)} W` : `${val.toFixed(2)} kWh`
       }
     },
     tooltip: {
       theme: isDarkMode ? 'dark' : 'light',
-      y: { formatter: (val: number) => val.toFixed(3) + " kWh" }
+      y: { formatter: (val: number) => usageView === "minutely" ? `${val.toFixed(1)} W` : `${val.toFixed(3)} kWh` }
     },
     legend: { show: false },
     theme: { mode: isDarkMode ? 'dark' : 'light' }
   }), [isDarkMode, usageChartCategories, usageBarColors, usageView]);
+
 
   // Live Trend Options
   const powerTrendSeries: any[] = [];
