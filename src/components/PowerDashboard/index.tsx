@@ -284,12 +284,22 @@ const PowerDashboard: React.FC = () => {
   const co2Saved = (displayData.energy * 0.85).toFixed(3);
 
   // === Real-time Today's kWh Estimate ===
-  // Menghitung penggunaan hari ini secara live dari WebSocket:
-  //   todayLiveUsage = energy_sekarang − snapshot_tengah_malam_kemarin
-  // Berlaku hanya saat view = "daily" dan berada di bulan yang sedang berjalan
-  const now = new Date();
-  const isCurrentMonth = usageYear === now.getFullYear() && usageMonth === now.getMonth() + 1;
-  const todayDateLabel = now.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
+  // Update nowState setiap menit agar tanggal dan bulan selalu akurat
+  const [nowState, setNowState] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNowState(new Date()), 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  const isCurrentMonth = useMemo(
+    () => usageYear === nowState.getFullYear() && usageMonth === nowState.getMonth() + 1,
+    [usageYear, usageMonth, nowState]
+  );
+  const currentMonthNum = nowState.getMonth() + 1; // 1-based, stable number
+  const todayDateLabel = useMemo(
+    () => nowState.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }),
+    [nowState]
+  );
 
   const todayLiveUsage = useMemo(() => {
     if (!realtimeData || !isCurrentMonth) return null;
@@ -327,7 +337,7 @@ const PowerDashboard: React.FC = () => {
     if (usageView === "monthly" && monthlyUsage) {
       // Untuk bulan ini, tambahkan estimasi hari ini ke total bulan berjalan
       const data = monthlyUsage.months.map(m => {
-        if (isCurrentMonth && m.month === now.getMonth() + 1 && m.month === (now.getMonth() + 1)) {
+        if (isCurrentMonth && m.month === currentMonthNum) {
           return parseFloat((m.usageKwh + (todayLiveUsage?.kwh ?? 0)).toFixed(3));
         }
         return m.usageKwh;
@@ -338,7 +348,7 @@ const PowerDashboard: React.FC = () => {
       return [{ name: "Konsumsi (kWh)", data: yearlyUsage.years.map(y => y.usageKwh) }];
     }
     return [{ name: "Konsumsi (kWh)", data: [] }];
-  }, [usageView, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, isCurrentMonth, now]);
+  }, [usageView, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, isCurrentMonth, currentMonthNum]);
 
   const usageChartCategories = useMemo(() => {
     if (usageView === "daily" && dailyUsage) {
@@ -378,7 +388,8 @@ const PowerDashboard: React.FC = () => {
       return { total: parseFloat(total.toFixed(3)), cost: parseFloat((total * PLN_RATE).toFixed(0)), label: "5 Tahun Terakhir" };
     }
     return { total: 0, cost: 0, label: "" };
-  }, [usageView, dailyUsage, monthlyUsage, yearlyUsage, usageYear, usageMonth, todayLiveUsage, isCurrentMonth]);
+  }, [usageView, dailyUsage, monthlyUsage, yearlyUsage, usageYear, usageMonth, todayLiveUsage, isCurrentMonth, monthNames]);
+
 
 
   // kWh Chart Options

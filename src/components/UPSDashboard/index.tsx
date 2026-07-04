@@ -477,7 +477,7 @@ const UPSDashboard: React.FC = () => {
           </div>
         </div>
         <div className="text-[10px] font-mono tracking-tighter opacity-50 uppercase">
-          DIY UPS MONITORING SYSTEM v1.0.4-BETA // TOP'S GARDEN ENGINEERING
+          DIY UPS MONITORING SYSTEM v1.0.4-BETA // TOP&apos;S GARDEN ENGINEERING
         </div>
       </footer>
     </div>
