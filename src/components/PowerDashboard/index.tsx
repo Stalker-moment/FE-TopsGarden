@@ -383,6 +383,46 @@ const PowerDashboard: React.FC = () => {
     });
   }, [outageLogs]);
 
+  // Helper to format duration seconds into human readable text
+  const formatOutageDuration = useCallback((totalSec: number) => {
+    if (totalSec >= 3600) {
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      return `${h}j ${m}m`;
+    }
+    if (totalSec >= 60) {
+      const m = Math.floor(totalSec / 60);
+      const s = totalSec % 60;
+      return `${m}m ${s}s`;
+    }
+    return `${totalSec}s`;
+  }, []);
+
+  // Helper to find all outage logs that intersect with [startMs, endMs]
+  const getOutageSummaryForRange = useCallback((startMs: number, endMs: number) => {
+    if (!outageLogs || outageLogs.length === 0) return { count: 0, totalDurationSec: 0 };
+
+    const matching = outageLogs.filter(log => {
+      const logStart = new Date(log.startedAt).getTime();
+      const logEnd = log.endedAt ? new Date(log.endedAt).getTime() : Date.now();
+      return Math.max(startMs, logStart) <= Math.min(endMs, logEnd);
+    });
+
+    if (matching.length === 0) return { count: 0, totalDurationSec: 0 };
+
+    let totalDurationSec = 0;
+    matching.forEach(log => {
+      const logStart = new Date(log.startedAt).getTime();
+      const logEnd = log.endedAt ? new Date(log.endedAt).getTime() : Date.now();
+      const overlapStart = Math.max(startMs, logStart);
+      const overlapEnd = Math.min(endMs, logEnd);
+      const sec = Math.max(0, Math.floor((overlapEnd - overlapStart) / 1000));
+      totalDurationSec += sec;
+    });
+
+    return { count: matching.length, totalDurationSec };
+  }, [outageLogs]);
+
   // Usage chart series & categories (with live today bar injected)
   const usageChartSeries = useMemo(() => {
     if (selectedUsageMetric === "voltage") {
@@ -431,11 +471,13 @@ const PowerDashboard: React.FC = () => {
       return [{
         name: "Daya Rata-Rata (W)",
         data: minutelyUsage.minutes.map(m => {
-          const minuteMs = new Date(usageYear, usageMonth - 1, usageDay, usageHour, m.minute).getTime();
-          const isFuture = minuteMs > nowMs;
-          if (isFuture) return 0; // Jam/menit masa depan: bukan matlis!
-          const isMatlis = isOutageAt(minuteMs) || (m.count > 0 && m.avgVoltage < 10);
-          if (isMatlis) return 4; // Visual red bar untuk matlis sungguhan
+          const minuteStartMs = new Date(usageYear, usageMonth - 1, usageDay, usageHour, m.minute, 0).getTime();
+          const minuteEndMs = minuteStartMs + 59999;
+          const isFuture = minuteStartMs > nowMs;
+          if (isFuture) return 0;
+          const summary = getOutageSummaryForRange(minuteStartMs, minuteEndMs);
+          const isMatlis = summary.count > 0 || (m.count > 0 && m.avgVoltage < 10);
+          if (isMatlis) return m.avgPower > 0 ? m.avgPower : 4;
           return m.avgPower;
         })
       }];
@@ -445,11 +487,13 @@ const PowerDashboard: React.FC = () => {
       return [{
         name: "Konsumsi (kWh)",
         data: hourlyUsage.hours.map(h => {
-          const hourMs = new Date(usageYear, usageMonth - 1, usageDay, h.hour).getTime();
-          const isFuture = hourMs > nowMs;
+          const hourStartMs = new Date(usageYear, usageMonth - 1, usageDay, h.hour, 0, 0).getTime();
+          const hourEndMs = hourStartMs + 3599999;
+          const isFuture = hourStartMs > nowMs;
           if (isFuture) return 0;
-          const isMatlis = isOutageAt(hourMs) || (h.count > 0 && h.avgVoltage < 10);
-          if (isMatlis) return 0.005;
+          const summary = getOutageSummaryForRange(hourStartMs, hourEndMs);
+          const isMatlis = summary.count > 0 || (h.count > 0 && h.avgVoltage < 10);
+          if (isMatlis) return h.usageKwh > 0 ? parseFloat(h.usageKwh.toFixed(4)) : 0.005;
           return parseFloat(h.usageKwh.toFixed(4));
         })
       }];
@@ -457,11 +501,14 @@ const PowerDashboard: React.FC = () => {
     if (usageView === "daily" && dailyUsage) {
       const nowMs = Date.now();
       const data = dailyUsage.days.map(d => {
-        const dayMs = new Date(d.date).getTime();
-        const isFuture = dayMs > nowMs;
+        const dayDate = new Date(d.date);
+        const dayStartMs = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), 0, 0, 0).getTime();
+        const dayEndMs = dayStartMs + 86399999;
+        const isFuture = dayStartMs > nowMs;
         if (isFuture) return 0;
-        const isMatlis = isOutageAt(dayMs) || (d.avgVoltage !== undefined && d.avgVoltage > 0 && d.avgVoltage < 10 && d.usageKwh === 0);
-        if (isMatlis) return 0.005;
+        const summary = getOutageSummaryForRange(dayStartMs, dayEndMs);
+        const isMatlis = summary.count > 0 || (d.avgVoltage !== undefined && d.avgVoltage > 0 && d.avgVoltage < 10 && d.usageKwh === 0);
+        if (isMatlis) return d.usageKwh > 0 ? parseFloat(d.usageKwh.toFixed(3)) : 0.005;
         return parseFloat(d.usageKwh.toFixed(3));
       });
       if (todayLiveUsage !== null) {
@@ -482,7 +529,7 @@ const PowerDashboard: React.FC = () => {
       return [{ name: "Konsumsi (kWh)", data: yearlyUsage.years.map(y => y.usageKwh) }];
     }
     return [{ name: "Konsumsi (kWh)", data: [] }];
-  }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, displayData, isCurrentMonth, currentMonthNum, isOutageAt, usageYear, usageMonth, usageDay, usageHour]);
+  }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, displayData, isCurrentMonth, currentMonthNum, isOutageAt, getOutageSummaryForRange, usageYear, usageMonth, usageDay, usageHour]);
 
   const usageChartCategories = useMemo(() => {
     if (usageView === "minutely" && minutelyUsage) return minutelyUsage.minutes.map(m => m.label);
@@ -504,37 +551,46 @@ const PowerDashboard: React.FC = () => {
     if (usageView === "minutely" && minutelyUsage) {
       const nowMs = Date.now();
       return minutelyUsage.minutes.map(m => {
-        const minuteMs = new Date(usageYear, usageMonth - 1, usageDay, usageHour, m.minute).getTime();
-        if (minuteMs > nowMs) return "#06b6d4"; // Jam/menit masa depan: cyan normal
-        const isMatlis = isOutageAt(minuteMs) || (m.count > 0 && m.avgVoltage < 10);
+        const minuteStartMs = new Date(usageYear, usageMonth - 1, usageDay, usageHour, m.minute, 0).getTime();
+        const minuteEndMs = minuteStartMs + 59999;
+        if (minuteStartMs > nowMs) return "#06b6d4";
+        const summary = getOutageSummaryForRange(minuteStartMs, minuteEndMs);
+        const isMatlis = summary.count > 0 || (m.count > 0 && m.avgVoltage < 10);
         return isMatlis ? "#ef4444" : "#06b6d4";
       });
     }
     if (usageView === "hourly" && hourlyUsage) {
       const nowMs = Date.now();
       return hourlyUsage.hours.map(h => {
-        const hourMs = new Date(usageYear, usageMonth - 1, usageDay, h.hour).getTime();
-        if (hourMs > nowMs) return "#8b5cf6";
-        const isMatlis = isOutageAt(hourMs) || (h.count > 0 && h.avgVoltage < 10);
+        const hourStartMs = new Date(usageYear, usageMonth - 1, usageDay, h.hour, 0, 0).getTime();
+        const hourEndMs = hourStartMs + 3599999;
+        if (hourStartMs > nowMs) return "#8b5cf6";
+        const summary = getOutageSummaryForRange(hourStartMs, hourEndMs);
+        const isMatlis = summary.count > 0 || (h.count > 0 && h.avgVoltage < 10);
         return isMatlis ? "#ef4444" : "#8b5cf6";
       });
     }
     if (usageView === "daily" && dailyUsage) {
       const nowMs = Date.now();
       const colors: string[] = dailyUsage.days.map(d => {
-        const dayMs = new Date(d.date).getTime();
-        if (dayMs <= nowMs && (isOutageAt(dayMs) || (d.avgVoltage !== undefined && d.avgVoltage > 0 && d.avgVoltage < 10))) {
-          return "#ef4444";
+        const dayDate = new Date(d.date);
+        const dayStartMs = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), 0, 0, 0).getTime();
+        const dayEndMs = dayStartMs + 86399999;
+        if (dayStartMs <= nowMs) {
+          const summary = getOutageSummaryForRange(dayStartMs, dayEndMs);
+          if (summary.count > 0 || (d.avgVoltage !== undefined && d.avgVoltage > 0 && d.avgVoltage < 10)) {
+            return "#ef4444";
+          }
         }
         return d.isResetDay ? "#f97316" : "#3b82f6";
       });
       if (todayLiveUsage !== null) {
-        colors.push(todayLiveUsage.isReset ? "#f97316" : "#f59e0b"); // amber = live hari ini
+        colors.push(todayLiveUsage.isReset ? "#f97316" : "#f59e0b");
       }
       return colors;
     }
     return undefined;
-  }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, todayLiveUsage, isOutageAt, usageYear, usageMonth, usageDay, usageHour]);
+  }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, todayLiveUsage, isOutageAt, getOutageSummaryForRange, usageYear, usageMonth, usageDay, usageHour]);
 
   const usageSummary = useMemo(() => {
     const liveAdd = (isCurrentMonth && todayLiveUsage) ? todayLiveUsage.kwh : 0;
@@ -622,16 +678,42 @@ const PowerDashboard: React.FC = () => {
           const nowMs = Date.now();
           if (usageView === "minutely" && minutelyUsage?.minutes?.[dataPointIndex]) {
             const m = minutelyUsage.minutes[dataPointIndex];
-            const minuteMs = new Date(usageYear, usageMonth - 1, usageDay, usageHour, m.minute).getTime();
-            if (minuteMs <= nowMs && (isOutageAt(minuteMs) || (m.count > 0 && m.avgVoltage < 10))) {
-              return `⚡ MATI LISTRIK (0.0 V / 0 W)`;
+            const minuteStartMs = new Date(usageYear, usageMonth - 1, usageDay, usageHour, m.minute, 0).getTime();
+            const minuteEndMs = minuteStartMs + 59999;
+            if (minuteStartMs <= nowMs) {
+              const summary = getOutageSummaryForRange(minuteStartMs, minuteEndMs);
+              if (summary.count > 0 || (m.count > 0 && m.avgVoltage < 10)) {
+                const durStr = summary.totalDurationSec > 0 ? formatOutageDuration(summary.totalDurationSec) : "1m";
+                const pwrStr = m.avgPower > 0 ? `${m.avgPower.toFixed(1)} W` : "0 W";
+                return `${pwrStr} (⚡ MATI LISTRIK: ${summary.count || 1}x, Durasi: ${durStr})`;
+              }
             }
           }
           if (usageView === "hourly" && hourlyUsage?.hours?.[dataPointIndex]) {
             const h = hourlyUsage.hours[dataPointIndex];
-            const hourMs = new Date(usageYear, usageMonth - 1, usageDay, h.hour).getTime();
-            if (hourMs <= nowMs && (isOutageAt(hourMs) || (h.count > 0 && h.avgVoltage < 10))) {
-              return `⚡ MATI LISTRIK (0.0 V / 0 W)`;
+            const hourStartMs = new Date(usageYear, usageMonth - 1, usageDay, h.hour, 0, 0).getTime();
+            const hourEndMs = hourStartMs + 3599999;
+            if (hourStartMs <= nowMs) {
+              const summary = getOutageSummaryForRange(hourStartMs, hourEndMs);
+              if (summary.count > 0 || (h.count > 0 && h.avgVoltage < 10)) {
+                const durStr = summary.totalDurationSec > 0 ? formatOutageDuration(summary.totalDurationSec) : "1m";
+                const kwhStr = `${h.usageKwh.toFixed(3)} kWh`;
+                return `${kwhStr} (⚡ MATI LISTRIK: ${summary.count || 1}x, Durasi: ${durStr})`;
+              }
+            }
+          }
+          if (usageView === "daily" && dailyUsage?.days?.[dataPointIndex]) {
+            const d = dailyUsage.days[dataPointIndex];
+            const dayDate = new Date(d.date);
+            const dayStartMs = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), 0, 0, 0).getTime();
+            const dayEndMs = dayStartMs + 86399999;
+            if (dayStartMs <= nowMs) {
+              const summary = getOutageSummaryForRange(dayStartMs, dayEndMs);
+              if (summary.count > 0 || (d.avgVoltage !== undefined && d.avgVoltage > 0 && d.avgVoltage < 10)) {
+                const durStr = summary.totalDurationSec > 0 ? formatOutageDuration(summary.totalDurationSec) : "1m";
+                const kwhStr = `${d.usageKwh.toFixed(3)} kWh`;
+                return `${kwhStr} (⚡ MATI LISTRIK: ${summary.count || 1}x, Durasi: ${durStr})`;
+              }
             }
           }
           if (selectedUsageMetric === "voltage") return `${val.toFixed(1)} V`;
@@ -642,7 +724,7 @@ const PowerDashboard: React.FC = () => {
     },
     legend: { show: false },
     theme: { mode: isDarkMode ? 'dark' : 'light' }
-  }), [isDarkMode, usageCategoriesKey, usageBarColorsKey, usageView, selectedUsageMetric, minutelyUsage, hourlyUsage, isOutageAt, usageYear, usageMonth, usageDay, usageHour]);
+  }), [isDarkMode, usageCategoriesKey, usageBarColorsKey, usageView, selectedUsageMetric, minutelyUsage, hourlyUsage, dailyUsage, isOutageAt, getOutageSummaryForRange, formatOutageDuration, usageYear, usageMonth, usageDay, usageHour]);
 
 
   // Live Trend Options
