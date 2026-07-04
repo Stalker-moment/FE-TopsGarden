@@ -567,13 +567,24 @@ const PowerDashboard: React.FC = () => {
     return { total: 0, cost: 0, label: "" };
   }, [usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, usageYear, usageMonth, usageDay, usageHour, todayLiveUsage, isCurrentMonth]);
 
+  // Join arrays into stable string keys for chart options memoization
+  const usageBarColorsKey = (usageBarColors || []).join(",");
+  const usageCategoriesKey = usageChartCategories.join(",");
+
   // kWh Chart Options
   const usageChartOptions: ApexOptions = useMemo(() => ({
     chart: {
       type: 'bar',
       toolbar: { show: false },
       background: 'transparent',
-      animations: { enabled: true, speed: 600 },
+      animations: {
+        enabled: true,
+        speed: 400,
+        dynamicAnimation: {
+          enabled: true,
+          speed: 300,
+        }
+      },
     },
     plotOptions: {
       bar: {
@@ -603,6 +614,9 @@ const PowerDashboard: React.FC = () => {
     },
     tooltip: {
       theme: isDarkMode ? 'dark' : 'light',
+      followCursor: false,
+      intersect: false,
+      shared: true,
       y: {
         formatter: (val: number, { dataPointIndex }: any) => {
           const nowMs = Date.now();
@@ -628,7 +642,7 @@ const PowerDashboard: React.FC = () => {
     },
     legend: { show: false },
     theme: { mode: isDarkMode ? 'dark' : 'light' }
-  }), [isDarkMode, usageChartCategories, usageBarColors, usageView, selectedUsageMetric, minutelyUsage, hourlyUsage, isOutageAt, usageYear, usageMonth, usageDay, usageHour]);
+  }), [isDarkMode, usageCategoriesKey, usageBarColorsKey, usageView, selectedUsageMetric, minutelyUsage, hourlyUsage, isOutageAt, usageYear, usageMonth, usageDay, usageHour]);
 
 
   // Live Trend Options
@@ -653,8 +667,23 @@ const PowerDashboard: React.FC = () => {
   }
   if (powerTrendYAxis.length === 0) powerTrendYAxis.push({ show: false });
 
-  const powerTrendOptions: ApexOptions = {
-    chart: { type: 'area', toolbar: { show: false }, background: 'transparent', animations: { enabled: true } },
+  const powerTrendColorsKey = powerTrendColors.join(",");
+  const powerTrendYAxisKey = powerTrendYAxis.length;
+
+  const powerTrendOptions: ApexOptions = useMemo(() => ({
+    chart: { 
+      type: 'area', 
+      toolbar: { show: false }, 
+      background: 'transparent', 
+      animations: { 
+        enabled: true,
+        speed: 400,
+        dynamicAnimation: {
+          enabled: true,
+          speed: 300
+        }
+      } 
+    },
     stroke: { curve: 'smooth', width: 2 },
     legend: { show: false },
     dataLabels: { enabled: false },
@@ -665,6 +694,9 @@ const PowerDashboard: React.FC = () => {
     yaxis: powerTrendYAxis,
     tooltip: { 
       theme: isDarkMode ? 'dark' : 'light', 
+      followCursor: false,
+      intersect: false,
+      shared: true,
       x: { formatter: (val) => new Date(val).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) },
       y: { formatter: (val, { seriesIndex, w }) => {
         const name = w?.globals?.seriesNames?.[seriesIndex] || "";
@@ -675,7 +707,7 @@ const PowerDashboard: React.FC = () => {
       }}
     },
     theme: { mode: isDarkMode ? 'dark' : 'light' }
-  };
+  }), [isDarkMode, powerTrendColorsKey, powerTrendYAxisKey]);
 
   // Fullscreen Usage Options
   const fullscreenUsageOptions: ApexOptions = useMemo(() => ({
