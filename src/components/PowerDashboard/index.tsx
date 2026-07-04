@@ -349,6 +349,12 @@ const PowerDashboard: React.FC = () => {
     () => nowState.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }),
     [nowState]
   );
+  const todayDateStr = useMemo(() => {
+    const y = nowState.getFullYear();
+    const m = String(nowState.getMonth() + 1).padStart(2, '0');
+    const d = String(nowState.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, [nowState]);
 
   const todayLiveUsage = useMemo(() => {
     if (!realtimeData || !isCurrentMonth) return null;
@@ -535,7 +541,7 @@ const PowerDashboard: React.FC = () => {
       return [{ name: "Konsumsi (kWh)", data: yearlyUsage.years.map(y => y.usageKwh) }];
     }
     return [{ name: "Konsumsi (kWh)", data: [] }];
-  }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, displayData, isCurrentMonth, currentMonthNum, isOutageAt, getOutageSummaryForRange, usageYear, usageMonth, usageDay, usageHour, todayDateStr]);
+  }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, displayData, isCurrentMonth, currentMonthNum, getOutageSummaryForRange, usageYear, usageMonth, usageDay, usageHour, todayDateStr]);
 
   const usageChartCategories = useMemo(() => {
     if (usageView === "minutely" && minutelyUsage) return minutelyUsage.minutes.map(m => m.label);
@@ -601,7 +607,7 @@ const PowerDashboard: React.FC = () => {
       return colors;
     }
     return undefined;
-  }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, todayLiveUsage, isOutageAt, getOutageSummaryForRange, usageYear, usageMonth, usageDay, usageHour, todayDateStr, isCurrentMonth]);
+  }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, todayLiveUsage, getOutageSummaryForRange, usageYear, usageMonth, usageDay, usageHour, todayDateStr, isCurrentMonth]);
 
   const usageSummary = useMemo(() => {
     const liveAdd = (isCurrentMonth && todayLiveUsage) ? todayLiveUsage.kwh : 0;
@@ -735,7 +741,7 @@ const PowerDashboard: React.FC = () => {
     },
     legend: { show: false },
     theme: { mode: isDarkMode ? 'dark' : 'light' }
-  }), [isDarkMode, usageCategoriesKey, usageBarColorsKey, usageView, selectedUsageMetric, minutelyUsage, hourlyUsage, dailyUsage, isOutageAt, getOutageSummaryForRange, formatOutageDuration, usageYear, usageMonth, usageDay, usageHour]);
+  }), [isDarkMode, usageCategoriesKey, usageBarColorsKey, usageBarColors, usageChartCategories, usageView, selectedUsageMetric, minutelyUsage, hourlyUsage, dailyUsage, getOutageSummaryForRange, formatOutageDuration, usageYear, usageMonth, usageDay, usageHour]);
 
 
   // Live Trend Options
@@ -800,7 +806,7 @@ const PowerDashboard: React.FC = () => {
       }}
     },
     theme: { mode: isDarkMode ? 'dark' : 'light' }
-  }), [isDarkMode, powerTrendColorsKey, powerTrendYAxisKey]);
+  }), [isDarkMode, powerTrendColorsKey, powerTrendYAxisKey, powerTrendColors, powerTrendYAxis]);
 
   // Fullscreen Usage Options
   const fullscreenUsageOptions: ApexOptions = useMemo(() => ({
