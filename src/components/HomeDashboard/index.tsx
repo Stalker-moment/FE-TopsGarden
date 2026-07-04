@@ -3,10 +3,12 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Cookies from "js-cookie";
 import CryptoJS from 'crypto-js';
+import Link from "next/link";
 import {
     FaTint, FaThermometerHalf, FaCloudSun, FaArrowLeft,
     FaRegCalendarAlt, FaRegClock, FaInfoCircle, FaLightbulb,
-    FaSun, FaMoon, FaBolt, FaEye, FaLink, FaUnlink, FaExclamationTriangle, FaSpinner, FaLeaf, FaRedo
+    FaSun, FaMoon, FaBolt, FaEye, FaLink, FaUnlink, FaExclamationTriangle, FaSpinner, FaLeaf, FaRedo,
+    FaPlug, FaBatteryFull, FaHistory, FaExternalLinkAlt, FaSlidersH, FaLaptop, FaTachometerAlt, FaChartBar
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import dynamic from 'next/dynamic';
@@ -467,6 +469,83 @@ const Home: React.FC = () => {
     const ws = useRef<WebSocket | null>(null);
     const [wsConnected, setWsConnected] = useState<boolean>(false);
 
+    // --- Data Summary Keseluruhan ---
+    const [pzemSummary, setPzemSummary] = useState<{
+        power: number;
+        voltage: number;
+        current: number;
+        totalKwh: number;
+        estimatedCost: number;
+        status: "ONLINE" | "OFFLINE";
+    }>({ power: 0, voltage: 0, current: 0, totalKwh: 0, estimatedCost: 0, status: "OFFLINE" });
+
+    const [serverBattery, setServerBattery] = useState<{
+        percent?: number;
+        acConnected?: boolean;
+        isCharging?: boolean;
+        timeRemaining?: number;
+        hasBattery?: boolean;
+    } | null>(null);
+
+    const [matlisCount, setMatlisCount] = useState<number>(0);
+
+    const fetchSummaryOverview = useCallback(async () => {
+        if (!WSS_HOST) return;
+        try {
+            const [devRes, battRes] = await Promise.all([
+                fetch(`https://${WSS_HOST}/api/device/pzem`),
+                fetch(`https://${WSS_HOST}/api/device/pzem/server-battery`)
+            ]);
+            if (devRes.ok) {
+                const devices = await devRes.json();
+                if (devices.length > 0) {
+                    const devId = devices[0].id;
+                    const [latestRes, dailyRes, outageRes] = await Promise.all([
+                        fetch(`https://${WSS_HOST}/api/device/pzem/${devId}/latest`),
+                        fetch(`https://${WSS_HOST}/api/device/pzem/${devId}/daily-usage`),
+                        fetch(`https://${WSS_HOST}/api/device/pzem/${devId}/outage-logs?limit=1`)
+                    ]);
+                    if (latestRes.ok) {
+                        const j = await latestRes.json();
+                        if (j.latest) {
+                            setPzemSummary(prev => ({
+                                ...prev,
+                                power: j.latest.power || 0,
+                                voltage: j.latest.voltage || 0,
+                                current: j.latest.current || 0,
+                                status: j.status || "OFFLINE"
+                            }));
+                        }
+                    }
+                    if (dailyRes.ok) {
+                        const d = await dailyRes.json();
+                        setPzemSummary(prev => ({
+                            ...prev,
+                            totalKwh: d.totalKwh || 0,
+                            estimatedCost: d.estimatedCost || 0
+                        }));
+                    }
+                    if (outageRes.ok) {
+                        const o = await outageRes.json();
+                        setMatlisCount(o.total || 0);
+                    }
+                }
+            }
+            if (battRes.ok) {
+                const b = await battRes.json();
+                setServerBattery(b);
+            }
+        } catch (e) {
+            console.error("Failed to fetch summary overview", e);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchSummaryOverview();
+        const interval = setInterval(fetchSummaryOverview, 15000);
+        return () => clearInterval(interval);
+    }, [fetchSummaryOverview]);
+
     // --- Logic ---
     useEffect(() => {
         if (typeof window !== "undefined") {
@@ -675,6 +754,146 @@ const Home: React.FC = () => {
                             </div>
                             <div className="mb-4 flex items-center justify-between"><h3 className="text-xl font-bold text-gray-800 dark:text-white">Metrik Sensor</h3></div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">{renderSensorCards()}</div>
+
+                            {/* ════════════════════════════════════════════════════════════ */}
+                            {/* RINGKASAN DATA KESELURUHAN (POWER MONITOR & HARDWARE SUMMARY)*/}
+                            {/* ════════════════════════════════════════════════════════════ */}
+                            <div className="mt-12">
+                                <div className="mb-6 flex items-center justify-between">
+                                    <div>
+                                        <h3 className="text-2xl font-black text-gray-800 dark:text-white tracking-tight flex items-center gap-2">
+                                            <FaBolt className="text-yellow-500" /> Ringkasan Sistem & Pemantauan Listrik
+                                        </h3>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                            Ringkasan statistik daya PZEM, baterai UPS server, dan riwayat mati listrik
+                                        </p>
+                                    </div>
+                                    <Link 
+                                        href="/dashboard/power"
+                                        className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                                    >
+                                        <span>Detail Power Dashboard</span>
+                                        <FaExternalLinkAlt size={11} />
+                                    </Link>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    {/* Card 1: PZEM Power Monitor Summary */}
+                                    <div className="relative overflow-hidden rounded-[2rem] bg-white/70 dark:bg-gray-800/60 backdrop-blur-xl border border-white/50 dark:border-gray-700/50 p-6 shadow-xl flex flex-col justify-between group hover:shadow-2xl transition-all">
+                                        <div>
+                                            <div className="flex items-center justify-between mb-4">
+                                                <div className="p-3 rounded-2xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xl">
+                                                    <FaPlug />
+                                                </div>
+                                                <span className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase border ${
+                                                    pzemSummary.status === "ONLINE"
+                                                        ? "bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800"
+                                                        : "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800"
+                                                }`}>
+                                                    {pzemSummary.status === "ONLINE" ? "● PZEM BedRoom" : "○ Offline"}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Pemakaian Daya Realtime</p>
+                                            <h4 className="text-3xl font-black text-gray-800 dark:text-white mt-1">
+                                                {pzemSummary.power.toFixed(1)} <span className="text-lg font-bold text-gray-500">W</span>
+                                            </h4>
+
+                                            <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-xs">
+                                                <div>
+                                                    <span className="text-gray-400 block text-[10px]">Tegangan & Arus</span>
+                                                    <span className="font-bold text-gray-700 dark:text-gray-200">{pzemSummary.voltage.toFixed(1)}V · {pzemSummary.current.toFixed(2)}A</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-gray-400 block text-[10px]">Total Bulan Ini</span>
+                                                    <span className="font-bold text-green-600 dark:text-green-400">{pzemSummary.totalKwh.toFixed(2)} kWh</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <Link
+                                            href="/dashboard/power"
+                                            className="mt-6 w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
+                                        >
+                                            <span>Buka Power Monitor</span>
+                                            <FaExternalLinkAlt size={12} />
+                                        </Link>
+                                    </div>
+
+                                    {/* Card 2: Server UPS & Battery Summary */}
+                                    <div className="relative overflow-hidden rounded-[2rem] bg-white/70 dark:bg-gray-800/60 backdrop-blur-xl border border-white/50 dark:border-gray-700/50 p-6 shadow-xl flex flex-col justify-between group hover:shadow-2xl transition-all">
+                                        <div>
+                                            <div className="flex items-center justify-between mb-4">
+                                                <div className="p-3 rounded-2xl bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-xl">
+                                                    <FaBatteryFull />
+                                                </div>
+                                                <span className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase border ${
+                                                    serverBattery?.acConnected !== false
+                                                        ? "bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800"
+                                                        : "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800"
+                                                }`}>
+                                                    {serverBattery?.acConnected !== false ? "⚡ PLN Normal" : "⚠️ Matlis (UPS On)"}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Baterai Server UPS</p>
+                                            <h4 className="text-3xl font-black text-gray-800 dark:text-white mt-1">
+                                                {serverBattery?.percent !== undefined ? `${serverBattery.percent}%` : "100%"}
+                                            </h4>
+
+                                            <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-xs">
+                                                <div>
+                                                    <span className="text-gray-400 block text-[10px]">Status Daya</span>
+                                                    <span className="font-bold text-gray-700 dark:text-gray-200">
+                                                        {serverBattery?.isCharging ? "Mengisi Daya" : "Baterai Penuh / Standby"}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-gray-400 block text-[10px]">Log Matlis</span>
+                                                    <span className="font-bold text-amber-600 dark:text-amber-400">{matlisCount} Kejadian</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <Link
+                                            href="/dashboard/ups"
+                                            className="mt-6 w-full py-2.5 rounded-xl bg-gray-900 hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
+                                        >
+                                            <span>Buka Monitor UPS</span>
+                                            <FaExternalLinkAlt size={12} />
+                                        </Link>
+                                    </div>
+
+                                    {/* Card 3: Quick Navigation Shortcuts */}
+                                    <div className="relative overflow-hidden rounded-[2rem] bg-white/70 dark:bg-gray-800/60 backdrop-blur-xl border border-white/50 dark:border-gray-700/50 p-6 shadow-xl flex flex-col justify-between group hover:shadow-2xl transition-all">
+                                        <div>
+                                            <div className="flex items-center justify-between mb-4">
+                                                <div className="p-3 rounded-2xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 text-xl">
+                                                    <FaSlidersH />
+                                                </div>
+                                                <span className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-purple-100 text-purple-700 border border-purple-300 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800">
+                                                    Navigasi Cepat
+                                                </span>
+                                            </div>
+                                            <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Kontrol Perangkat</p>
+                                            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mt-1">Akses instan modul kebun Anda</p>
+
+                                            <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-xs">
+                                                <Link href="/dashboard/light-control" className="flex items-center justify-between p-2 rounded-xl bg-gray-100 dark:bg-gray-700/50 hover:bg-green-500/10 hover:text-green-600 transition-colors">
+                                                    <span className="font-bold flex items-center gap-2"><FaLightbulb className="text-yellow-500" /> Light Control</span>
+                                                    <FaExternalLinkAlt size={10} />
+                                                </Link>
+                                                <Link href="/dashboard/output-setting" className="flex items-center justify-between p-2 rounded-xl bg-gray-100 dark:bg-gray-700/50 hover:bg-blue-500/10 hover:text-blue-600 transition-colors">
+                                                    <span className="font-bold flex items-center gap-2"><FaSlidersH className="text-blue-500" /> Output Setting</span>
+                                                    <FaExternalLinkAlt size={10} />
+                                                </Link>
+                                                <Link href="/dashboard/plc-setting" className="flex items-center justify-between p-2 rounded-xl bg-gray-100 dark:bg-gray-700/50 hover:bg-purple-500/10 hover:text-purple-600 transition-colors">
+                                                    <span className="font-bold flex items-center gap-2"><FaLaptop className="text-purple-500" /> PLC Setting</span>
+                                                    <FaExternalLinkAlt size={10} />
+                                                </Link>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </motion.div>
                     )}
                 </AnimatePresence>

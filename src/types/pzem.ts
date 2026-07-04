@@ -55,6 +55,8 @@ export interface PzemDailyUsageItem {
   date: string;
   dateLabel: string;
   usageKwh: number;
+  avgVoltage?: number;
+  avgCurrent?: number;
   energyKwh: number;
   isResetDay: boolean;
 }
@@ -72,6 +74,8 @@ export interface PzemMonthlyUsageItem {
   month: number;
   label: string;
   usageKwh: number;
+  avgVoltage?: number;
+  avgCurrent?: number;
   hasResetDay: boolean;
   daysCount: number;
 }
@@ -87,6 +91,8 @@ export interface PzemMonthlyUsageResponse {
 export interface PzemYearlyUsageItem {
   year: number;
   usageKwh: number;
+  avgVoltage?: number;
+  avgCurrent?: number;
   hasResetDay: boolean;
 }
 

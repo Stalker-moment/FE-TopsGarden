@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
@@ -140,6 +141,7 @@ const PowerDashboard: React.FC = () => {
 
   // Chart toggles
   const [activeMetrics, setActiveMetrics] = useState({ power: true, voltage: false, current: false });
+  const [selectedUsageMetric, setSelectedUsageMetric] = useState<"kwh" | "voltage" | "current">("kwh");
 
   // Fullscreen modal state
   const [fullscreenChart, setFullscreenChart] = useState<"usage" | "trend" | null>(null);
@@ -154,6 +156,16 @@ const PowerDashboard: React.FC = () => {
       document.body.style.overflow = "";
     };
   }, [fullscreenChart]);
+
+  // Listen for Escape key to exit fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullscreenChart(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
 
 
   // WebSocket Reference
@@ -363,6 +375,47 @@ const PowerDashboard: React.FC = () => {
 
   // Usage chart series & categories (with live today bar injected)
   const usageChartSeries = useMemo(() => {
+    if (selectedUsageMetric === "voltage") {
+      if (usageView === "minutely" && minutelyUsage) {
+        return [{ name: "Tegangan Rata-Rata (V)", data: minutelyUsage.minutes.map(m => m.avgVoltage || 0) }];
+      }
+      if (usageView === "hourly" && hourlyUsage) {
+        return [{ name: "Tegangan Rata-Rata (V)", data: hourlyUsage.hours.map(h => h.avgVoltage || 0) }];
+      }
+      if (usageView === "daily" && dailyUsage) {
+        const data = dailyUsage.days.map(d => d.avgVoltage || 0);
+        if (todayLiveUsage !== null) data.push(displayData.voltage);
+        return [{ name: "Tegangan Rata-Rata (V)", data }];
+      }
+      if (usageView === "monthly" && monthlyUsage) {
+        return [{ name: "Tegangan Rata-Rata (V)", data: monthlyUsage.months.map(m => m.avgVoltage || 0) }];
+      }
+      if (usageView === "yearly" && yearlyUsage) {
+        return [{ name: "Tegangan Rata-Rata (V)", data: yearlyUsage.years.map(y => y.avgVoltage || 0) }];
+      }
+    }
+
+    if (selectedUsageMetric === "current") {
+      if (usageView === "minutely" && minutelyUsage) {
+        return [{ name: "Arus Rata-Rata (A)", data: minutelyUsage.minutes.map(m => m.avgCurrent || 0) }];
+      }
+      if (usageView === "hourly" && hourlyUsage) {
+        return [{ name: "Arus Rata-Rata (A)", data: hourlyUsage.hours.map(h => (h.avgPower && h.avgVoltage ? parseFloat((h.avgPower / h.avgVoltage).toFixed(2)) : 0)) }];
+      }
+      if (usageView === "daily" && dailyUsage) {
+        const data = dailyUsage.days.map(d => d.avgCurrent || 0);
+        if (todayLiveUsage !== null) data.push(displayData.current);
+        return [{ name: "Arus Rata-Rata (A)", data }];
+      }
+      if (usageView === "monthly" && monthlyUsage) {
+        return [{ name: "Arus Rata-Rata (A)", data: monthlyUsage.months.map(m => m.avgCurrent || 0) }];
+      }
+      if (usageView === "yearly" && yearlyUsage) {
+        return [{ name: "Arus Rata-Rata (A)", data: yearlyUsage.years.map(y => y.avgCurrent || 0) }];
+      }
+    }
+
+    // Default: kWh / Power (W)
     if (usageView === "minutely" && minutelyUsage) {
       return [{ name: "Daya Rata-Rata (W)", data: minutelyUsage.minutes.map(m => m.avgPower) }];
     }
@@ -371,14 +424,12 @@ const PowerDashboard: React.FC = () => {
     }
     if (usageView === "daily" && dailyUsage) {
       const data = dailyUsage.days.map(d => parseFloat(d.usageKwh.toFixed(3)));
-      // Inject today's live bar (jika bulan ini dan ada realtime data)
       if (todayLiveUsage !== null) {
         data.push(todayLiveUsage.kwh);
       }
       return [{ name: "Konsumsi (kWh)", data }];
     }
     if (usageView === "monthly" && monthlyUsage) {
-      // Untuk bulan ini, tambahkan estimasi hari ini ke total bulan berjalan
       const data = monthlyUsage.months.map(m => {
         if (isCurrentMonth && m.month === currentMonthNum) {
           return parseFloat((m.usageKwh + (todayLiveUsage?.kwh ?? 0)).toFixed(3));
@@ -391,7 +442,7 @@ const PowerDashboard: React.FC = () => {
       return [{ name: "Konsumsi (kWh)", data: yearlyUsage.years.map(y => y.usageKwh) }];
     }
     return [{ name: "Konsumsi (kWh)", data: [] }];
-  }, [usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, isCurrentMonth, currentMonthNum]);
+  }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, displayData, isCurrentMonth, currentMonthNum]);
 
   const usageChartCategories = useMemo(() => {
     if (usageView === "minutely" && minutelyUsage) return minutelyUsage.minutes.map(m => m.label);
@@ -408,6 +459,8 @@ const PowerDashboard: React.FC = () => {
 
   // Colors per bar: orange = reset day, amber = live today, cyan = minutely, violet = hourly, blue = normal
   const usageBarColors = useMemo(() => {
+    if (selectedUsageMetric === "voltage") return ["#3b82f6"];
+    if (selectedUsageMetric === "current") return ["#ef4444"];
     if (usageView === "minutely") return ["#06b6d4"];
     if (usageView === "hourly") return ["#8b5cf6"];
     if (usageView === "daily" && dailyUsage) {
@@ -418,7 +471,7 @@ const PowerDashboard: React.FC = () => {
       return colors;
     }
     return undefined;
-  }, [usageView, dailyUsage, todayLiveUsage]);
+  }, [selectedUsageMetric, usageView, dailyUsage, todayLiveUsage]);
 
   const usageSummary = useMemo(() => {
     const liveAdd = (isCurrentMonth && todayLiveUsage) ? todayLiveUsage.kwh : 0;
@@ -451,10 +504,6 @@ const PowerDashboard: React.FC = () => {
     return { total: 0, cost: 0, label: "" };
   }, [usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, usageYear, usageMonth, usageDay, usageHour, todayLiveUsage, isCurrentMonth]);
 
-
-
-
-
   // kWh Chart Options
   const usageChartOptions: ApexOptions = useMemo(() => ({
     chart: {
@@ -467,7 +516,7 @@ const PowerDashboard: React.FC = () => {
       bar: {
         borderRadius: 6,
         columnWidth: usageView === "yearly" ? "40%" : usageView === "monthly" ? "50%" : "70%",
-        distributed: usageView === "daily",
+        distributed: selectedUsageMetric === "kwh" && usageView === "daily",
       },
     },
     colors: usageBarColors ?? ["#3b82f6"],
@@ -482,16 +531,26 @@ const PowerDashboard: React.FC = () => {
     yaxis: {
       labels: {
         style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' },
-        formatter: (val: number) => usageView === "minutely" ? `${val.toFixed(1)} W` : `${val.toFixed(2)} kWh`
+        formatter: (val: number) => {
+          if (selectedUsageMetric === "voltage") return `${val.toFixed(1)} V`;
+          if (selectedUsageMetric === "current") return `${val.toFixed(2)} A`;
+          return usageView === "minutely" ? `${val.toFixed(1)} W` : `${val.toFixed(2)} kWh`;
+        }
       }
     },
     tooltip: {
       theme: isDarkMode ? 'dark' : 'light',
-      y: { formatter: (val: number) => usageView === "minutely" ? `${val.toFixed(1)} W` : `${val.toFixed(3)} kWh` }
+      y: {
+        formatter: (val: number) => {
+          if (selectedUsageMetric === "voltage") return `${val.toFixed(1)} V`;
+          if (selectedUsageMetric === "current") return `${val.toFixed(2)} A`;
+          return usageView === "minutely" ? `${val.toFixed(1)} W` : `${val.toFixed(3)} kWh`;
+        }
+      }
     },
     legend: { show: false },
     theme: { mode: isDarkMode ? 'dark' : 'light' }
-  }), [isDarkMode, usageChartCategories, usageBarColors, usageView]);
+  }), [isDarkMode, usageChartCategories, usageBarColors, usageView, selectedUsageMetric]);
 
 
   // Live Trend Options
@@ -589,6 +648,123 @@ const PowerDashboard: React.FC = () => {
     : "bg-gray-400";
 
   const currentYear = new Date().getFullYear();
+
+  // Render Fullscreen Overlay in Portal directly under document.body
+  const renderFullscreenModal = () => {
+    if (!fullscreenChart || typeof window === "undefined") return null;
+    return createPortal(
+      <AnimatePresence>
+        {fullscreenChart && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.97 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[9999999] bg-gray-950/98 backdrop-blur-2xl p-4 md:p-6 flex flex-col justify-between text-white overflow-hidden"
+          >
+            {/* Top Bar with prominent Close Button */}
+            <div className="flex items-center justify-between gap-4 pb-3 border-b border-gray-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-blue-600/30 text-blue-400 border border-blue-500/40 shrink-0">
+                  {fullscreenChart === "usage" ? <FaChartBar size={20} /> : <FaChartLine size={20} />}
+                </div>
+                <div>
+                  <h2 className="text-sm md:text-xl font-extrabold flex items-center gap-2 text-white">
+                    {fullscreenChart === "usage" ? (
+                      <>Grafik Konsumsi &mdash; {
+                        usageView === "minutely" ? `Jam ${String(usageHour).padStart(2,'0')}:00, ${usageDay} ${MONTH_NAMES[usageMonth - 1]}` :
+                        usageView === "hourly" ? `24 Jam (${usageDay} ${MONTH_NAMES[usageMonth - 1]} ${usageYear})` :
+                        usageView === "daily" ? `${MONTH_NAMES[usageMonth - 1]} ${usageYear}` :
+                        usageView === "monthly" ? `Tahun ${usageYear}` :
+                        "5 Tahun Terakhir"
+                      }</>
+                    ) : (
+                      "Live Power Trend (Real-time)"
+                    )}
+                  </h2>
+                  <p className="text-xs text-gray-400 hidden sm:block">
+                    {fullscreenChart === "usage" 
+                      ? `Total: ${usageSummary.total.toFixed(3)} kWh (Rp ${usageSummary.cost.toLocaleString('id-ID')})`
+                      : `Current Load: ${displayData.power.toFixed(1)} W · Voltage: ${displayData.voltage.toFixed(1)} V`
+                    }
+                  </p>
+                </div>
+              </div>
+
+              {/* Landscape Indicator Badge */}
+              <div className="hidden lg:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-cyan-950/80 border border-cyan-700/60 text-cyan-300 text-xs font-semibold shadow-inner">
+                <FaMobileAlt className="animate-bounce text-cyan-400" />
+                <span>Mode Landscape disarankan pada HP/Tablet</span>
+              </div>
+
+              {/* Controls & PROMINENT RED CLOSE BUTTON */}
+              <div className="flex items-center gap-3">
+                {fullscreenChart === "usage" ? (
+                  <div className="hidden sm:flex bg-gray-900 rounded-xl p-1 gap-1 border border-gray-800">
+                    {(["minutely", "hourly", "daily", "monthly", "yearly"] as UsageView[]).map(v => (
+                      <button key={v} onClick={() => setUsageView(v)}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                          usageView === v ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"
+                        }`}>
+                        {v === "minutely" ? "1 Jam" : v === "hourly" ? "24 Jam" : v === "daily" ? "Harian" : v === "monthly" ? "Bulanan" : "Tahunan"}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex gap-1.5">
+                    {[["power","Power","yellow"],["voltage","Voltage","blue"],["current","Current","red"]].map(([key, label, col]) => (
+                      <button key={key} onClick={() => setActiveMetrics(p => ({ ...p, [key]: !p[key as keyof typeof p] }))}
+                        className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors border ${
+                          activeMetrics[key as keyof typeof activeMetrics]
+                            ? `bg-${col}-900/40 text-${col}-400 border-${col}-700`
+                            : "bg-transparent text-gray-500 border-gray-700"
+                        }`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* SANGAT JELAS: Tombol Merah Tutup Fullscreen / Tekan ESC */}
+                <button
+                  onClick={() => setFullscreenChart(null)}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-extrabold text-xs shadow-lg shadow-red-600/40 transition-all border border-red-400 flex items-center gap-2 shrink-0 cursor-pointer"
+                  title="Tutup Fullscreen (atau tekan tombol ESC)"
+                >
+                  <FaTimes size={15} />
+                  <span>Keluar Fullscreen (ESC)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Mobile Landscape Notice */}
+            <div className="sm:hidden mt-2 p-2 rounded-xl bg-cyan-950/60 border border-cyan-800 flex items-center justify-between text-xs text-cyan-300 shrink-0">
+              <span className="flex items-center gap-1.5 font-semibold">
+                <FaMobileAlt className="text-cyan-400 animate-pulse" />
+                <span>Mode Landscape disarankan</span>
+              </span>
+              <button
+                onClick={() => setFullscreenChart(null)}
+                className="text-xs bg-red-600 text-white px-2.5 py-1 rounded-lg font-bold flex items-center gap-1"
+              >
+                <FaTimes size={10} /> Keluar
+              </button>
+            </div>
+
+            {/* Chart Container */}
+            <div className="flex-1 w-full mt-3 min-h-0 relative">
+              {fullscreenChart === "usage" ? (
+                <ReactApexChart options={fullscreenUsageOptions} series={usageChartSeries} type="bar" height="100%" />
+              ) : (
+                <ReactApexChart options={fullscreenTrendOptions} series={powerTrendSeries} type="area" height="100%" />
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>,
+      document.body
+    );
+  };
 
 
   return (
@@ -849,6 +1025,40 @@ const PowerDashboard: React.FC = () => {
 
             {/* Controls */}
             <div className="flex flex-wrap items-center gap-2">
+
+              {/* Metric Selector (kWh / Voltage / Current) */}
+              <div className="flex bg-gray-100 dark:bg-gray-700/60 rounded-xl p-1 gap-1 shrink-0 overflow-x-auto max-w-full no-scrollbar">
+                <button
+                  onClick={() => setSelectedUsageMetric("kwh")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    selectedUsageMetric === "kwh"
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                  }`}
+                >
+                  kWh Usage
+                </button>
+                <button
+                  onClick={() => setSelectedUsageMetric("voltage")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    selectedUsageMetric === "voltage"
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                  }`}
+                >
+                  Avg Tegangan (V)
+                </button>
+                <button
+                  onClick={() => setSelectedUsageMetric("current")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    selectedUsageMetric === "current"
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                  }`}
+                >
+                  Avg Arus (A)
+                </button>
+              </div>
 
               {/* Toggle View */}
               <div className="flex bg-gray-100 dark:bg-gray-700/60 rounded-xl p-1 gap-1 overflow-x-auto max-w-full no-scrollbar shrink-0">
@@ -1330,111 +1540,8 @@ const PowerDashboard: React.FC = () => {
           </div>
         </motion.div>
 
-        {/* ══════════════════════════════════════════ */}
-        {/* Fullscreen Landscape Modal View           */}
-        {/* ══════════════════════════════════════════ */}
-        <AnimatePresence>
-          {fullscreenChart && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.96 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-[9999] bg-gray-950/95 backdrop-blur-2xl p-4 md:p-6 flex flex-col justify-between text-white overflow-hidden"
-            >
-              {/* Header Bar */}
-              <div className="flex items-center justify-between gap-4 pb-3 border-b border-gray-800 shrink-0">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-blue-600/30 text-blue-400 border border-blue-500/40 shrink-0">
-                    {fullscreenChart === "usage" ? <FaChartBar size={18} /> : <FaChartLine size={18} />}
-                  </div>
-                  <div>
-                    <h2 className="text-sm md:text-lg font-bold flex items-center gap-2">
-                      {fullscreenChart === "usage" ? (
-                        <>Grafik Konsumsi &mdash; {
-                          usageView === "minutely" ? `Jam ${String(usageHour).padStart(2,'0')}:00, ${usageDay} ${MONTH_NAMES[usageMonth - 1]}` :
-                          usageView === "hourly" ? `24 Jam (${usageDay} ${MONTH_NAMES[usageMonth - 1]} ${usageYear})` :
-                          usageView === "daily" ? `${MONTH_NAMES[usageMonth - 1]} ${usageYear}` :
-                          usageView === "monthly" ? `Tahun ${usageYear}` :
-                          "5 Tahun Terakhir"
-                        }</>
-                      ) : (
-                        "Live Power Trend (Real-time)"
-                      )}
-                    </h2>
-                    <p className="text-xs text-gray-400 hidden sm:block">
-                      {fullscreenChart === "usage" 
-                        ? `Total: ${usageSummary.total.toFixed(3)} kWh (Rp ${usageSummary.cost.toLocaleString('id-ID')})`
-                        : `Current Load: ${displayData.power.toFixed(1)} W · Voltage: ${displayData.voltage.toFixed(1)} V`
-                      }
-                    </p>
-                  </div>
-                </div>
-
-                {/* Landscape Indicator Badge */}
-                <div className="hidden lg:flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/60 border border-cyan-800/60 text-cyan-300 text-xs font-semibold">
-                  <FaMobileAlt className="animate-bounce" />
-                  <span>Putar layar ke <strong>Landscape</strong> untuk tampilan grafik penuh</span>
-                </div>
-
-                {/* Controls & Close Button */}
-                <div className="flex items-center gap-2">
-                  {fullscreenChart === "usage" ? (
-                    <div className="hidden sm:flex bg-gray-800/80 rounded-xl p-1 gap-1">
-                      {(["minutely", "hourly", "daily", "monthly", "yearly"] as UsageView[]).map(v => (
-                        <button key={v} onClick={() => setUsageView(v)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                            usageView === v ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"
-                          }`}>
-                          {v === "minutely" ? "1 Jam" : v === "hourly" ? "24 Jam" : v === "daily" ? "Harian" : v === "monthly" ? "Bulanan" : "Tahunan"}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex gap-1.5">
-                      {[["power","Power","yellow"],["voltage","Voltage","blue"],["current","Current","red"]].map(([key, label, col]) => (
-                        <button key={key} onClick={() => setActiveMetrics(p => ({ ...p, [key]: !p[key as keyof typeof p] }))}
-                          className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors border ${
-                            activeMetrics[key as keyof typeof activeMetrics]
-                              ? `bg-${col}-900/40 text-${col}-400 border-${col}-700`
-                              : "bg-transparent text-gray-500 border-gray-700"
-                          }`}>
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  <button
-                    onClick={() => setFullscreenChart(null)}
-                    className="p-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition-colors border border-gray-700 shrink-0"
-                    title="Tutup Fullscreen"
-                  >
-                    <FaCompress size={16} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Landscape Suggestion Notice on Small Mobile Portrait */}
-              <div className="sm:hidden mt-2 p-2 rounded-xl bg-cyan-950/40 border border-cyan-800/40 flex items-center justify-between text-xs text-cyan-300 shrink-0">
-                <span className="flex items-center gap-1.5">
-                  <FaMobileAlt className="text-cyan-400 animate-pulse" />
-                  <span>Mode Landscape disarankan</span>
-                </span>
-                <span className="text-[10px] bg-cyan-900/60 px-2 py-0.5 rounded-full border border-cyan-700">Rotasi Layar HP</span>
-              </div>
-
-              {/* Chart Body */}
-              <div className="flex-1 w-full mt-3 min-h-0 relative">
-                {fullscreenChart === "usage" ? (
-                  <ReactApexChart options={fullscreenUsageOptions} series={usageChartSeries} type="bar" height="100%" />
-                ) : (
-                  <ReactApexChart options={fullscreenTrendOptions} series={powerTrendSeries} type="area" height="100%" />
-                )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Render Fullscreen Modal via Portal at root DOM */}
+        {renderFullscreenModal()}
 
       </div>
     </div>
