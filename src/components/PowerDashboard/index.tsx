@@ -1496,6 +1496,125 @@ const PowerDashboard: React.FC = () => {
           </motion.div>
         )}
 
+        {/* ══════════════════════════════════════════ */}
+        {/* TABEL RIWAYAT MATI LISTRIK (POWER OUTAGES) */}
+        {/* ══════════════════════════════════════════ */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}
+          className="mb-8 rounded-[2rem] bg-white/60 dark:bg-gray-800/60 backdrop-blur-md border border-white/50 dark:border-gray-700 overflow-hidden shadow-lg">
+          
+          {/* Header Bar */}
+          <div className="px-6 md:px-8 py-5 bg-gradient-to-r from-red-600/10 via-amber-600/5 to-transparent border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h3 className="text-xl font-bold flex items-center gap-2 text-gray-800 dark:text-white">
+                <span className="p-2 rounded-xl bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400">
+                  <FaExclamationTriangle size={15} />
+                </span>
+                Riwayat Kejadian Mati Listrik (Power Outage Logs)
+              </h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Catatan otomatis deteksi 0.0V / pemadaman listrik dari sensor ESP32 BedRoom
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-semibold px-3.5 py-1.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800">
+                Total {outageTotal} Kejadian
+              </span>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-gray-50/80 dark:bg-gray-900/40 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-widest">
+                  <th className="py-3 px-5 font-bold">Status</th>
+                  <th className="py-3 px-5 font-bold">Mulai Padam</th>
+                  <th className="py-3 px-5 font-bold">Selesai / Menyala</th>
+                  <th className="py-3 px-5 font-bold">Durasi Mati Listrik</th>
+                  <th className="py-3 px-5 font-bold">Tegangan Akhir</th>
+                </tr>
+              </thead>
+              <tbody className="text-sm cursor-default divide-y divide-gray-100 dark:divide-gray-700/50">
+                {outageLoading ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-gray-400">
+                      <span className="w-5 h-5 border-2 border-red-500 border-t-transparent rounded-full animate-spin inline-block mr-2" />
+                      Memuat data mati listrik...
+                    </td>
+                  </tr>
+                ) : outageLogs.length > 0 ? (
+                  outageLogs.map((log, idx) => (
+                    <tr key={log.id} className={`group transition-colors duration-150 ${idx % 2 === 0 ? 'bg-white/40 dark:bg-transparent' : 'bg-gray-50/60 dark:bg-gray-900/20'} hover:bg-red-50/40 dark:hover:bg-red-950/20`}>
+                      <td className="py-3.5 px-5">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
+                          log.status === "BERLANGSUNG"
+                            ? "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border-red-300 dark:border-red-800 animate-pulse"
+                            : "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800"
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${log.status === "BERLANGSUNG" ? "bg-red-500 animate-ping" : "bg-green-500"}`} />
+                          {log.status === "BERLANGSUNG" ? "SEDANG MATI LISTRIK" : "SELESAI (KEMBALI NYALA)"}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-5 font-mono text-xs text-gray-700 dark:text-gray-300">
+                        {new Date(log.startedAt).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      </td>
+                      <td className="py-3.5 px-5 font-mono text-xs text-gray-700 dark:text-gray-300">
+                        {log.endedAt ? (
+                          new Date(log.endedAt).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                        ) : (
+                          <span className="text-red-500 font-bold">Masih Padam...</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-5 font-bold text-gray-800 dark:text-gray-200">
+                        {log.durationFormatted || (log.durationSec ? `${Math.floor(log.durationSec / 60)}m ${log.durationSec % 60}s` : "Memproses...")}
+                      </td>
+                      <td className="py-3.5 px-5 font-mono text-xs font-semibold text-red-500">
+                        {log.lastVoltage.toFixed(1)} V
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="py-10 text-center">
+                      <div className="flex flex-col items-center gap-2 text-gray-400 dark:text-gray-500">
+                        <FaCheckCircle size={26} className="text-green-500/60" />
+                        <p className="text-sm font-semibold">Tidak ada catatan mati listrik</p>
+                        <p className="text-xs">Listrik PLN berjalan stabil tanpa pemadaman terdeteksi.</p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Outage Table Pagination */}
+          {outageTotal > 10 && (
+            <div className="px-6 py-3 bg-gray-50/50 dark:bg-gray-900/30 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center text-xs">
+              <span className="text-gray-500">
+                Halaman {outagePage} dari {Math.ceil(outageTotal / 10)}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  disabled={outagePage <= 1}
+                  onClick={() => setOutagePage(p => p - 1)}
+                  className="px-3 py-1 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-40"
+                >
+                  Prev
+                </button>
+                <button
+                  disabled={outagePage >= Math.ceil(outageTotal / 10)}
+                  onClick={() => setOutagePage(p => p + 1)}
+                  className="px-3 py-1 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </motion.div>
+
         {/* History Table */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
           className="rounded-[2rem] bg-white/60 dark:bg-gray-800/60 backdrop-blur-md border border-white/50 dark:border-gray-700 overflow-hidden shadow-lg">
