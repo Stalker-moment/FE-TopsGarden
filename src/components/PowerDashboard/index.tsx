@@ -44,6 +44,7 @@ const HTTPS_API_URL = process.env.NEXT_PUBLIC_HTTPS_API_URL || "localhost:3001";
 const API_URL = `https://${HTTPS_API_URL}`;
 const WS_URL = process.env.NEXT_PUBLIC_WS_PZEM_URL || `wss://${HTTPS_API_URL}/pzem`;
 const PLN_RATE = 1444.70;
+const MONTH_NAMES = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 
 // ─────────────────────────────────────────────
 // Sub-Components
@@ -151,7 +152,7 @@ const PowerDashboard: React.FC = () => {
   }, []);
 
   // 1. Fetch Devices List
-  const fetchDevices = async () => {
+  const fetchDevices = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/api/device/pzem`);
       if (res.ok) {
@@ -160,9 +161,10 @@ const PowerDashboard: React.FC = () => {
         if (data.length > 0 && !selectedDeviceId) setSelectedDeviceId(data[0].id);
       }
     } catch (error) { console.error("Failed to fetch devices:", error); }
-  };
+  }, [selectedDeviceId]);
 
-  useEffect(() => { fetchDevices(); }, []);
+  useEffect(() => { fetchDevices(); }, [fetchDevices]);
+
 
   // 2. Fetch Initial Data when device selected
   useEffect(() => {
@@ -364,7 +366,7 @@ const PowerDashboard: React.FC = () => {
   // Colors per bar: orange = reset day, amber = live today, blue = normal
   const usageBarColors = useMemo(() => {
     if (usageView === "daily" && dailyUsage) {
-      const colors = dailyUsage.days.map(d => d.isResetDay ? "#f97316" : "#3b82f6");
+      const colors: string[] = dailyUsage.days.map(d => d.isResetDay ? "#f97316" : "#3b82f6");
       if (todayLiveUsage !== null) {
         colors.push(todayLiveUsage.isReset ? "#f97316" : "#f59e0b"); // amber = live hari ini
       }
@@ -377,7 +379,7 @@ const PowerDashboard: React.FC = () => {
     const liveAdd = (isCurrentMonth && todayLiveUsage) ? todayLiveUsage.kwh : 0;
     if (usageView === "daily" && dailyUsage) {
       const total = parseFloat((dailyUsage.totalKwh + liveAdd).toFixed(3));
-      return { total, cost: parseFloat((total * PLN_RATE).toFixed(0)), label: `${monthNames[usageMonth - 1]} ${usageYear}` };
+      return { total, cost: parseFloat((total * PLN_RATE).toFixed(0)), label: `${MONTH_NAMES[usageMonth - 1]} ${usageYear}` };
     }
     if (usageView === "monthly" && monthlyUsage) {
       const total = parseFloat((monthlyUsage.totalKwh + liveAdd).toFixed(3));
@@ -388,7 +390,8 @@ const PowerDashboard: React.FC = () => {
       return { total: parseFloat(total.toFixed(3)), cost: parseFloat((total * PLN_RATE).toFixed(0)), label: "5 Tahun Terakhir" };
     }
     return { total: 0, cost: 0, label: "" };
-  }, [usageView, dailyUsage, monthlyUsage, yearlyUsage, usageYear, usageMonth, todayLiveUsage, isCurrentMonth, monthNames]);
+  }, [usageView, dailyUsage, monthlyUsage, yearlyUsage, usageYear, usageMonth, todayLiveUsage, isCurrentMonth]);
+
 
 
 
@@ -485,8 +488,8 @@ const PowerDashboard: React.FC = () => {
     ? serverBattery.percent >= 50 ? "bg-green-500" : serverBattery.percent >= 20 ? "bg-yellow-500" : "bg-red-500"
     : "bg-gray-400";
 
-  const monthNames = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
   const currentYear = new Date().getFullYear();
+
 
   return (
     <div className="min-h-screen text-gray-800 dark:text-gray-100 transition-colors duration-300">
@@ -713,10 +716,11 @@ const PowerDashboard: React.FC = () => {
               <h3 className="text-xl font-bold flex items-center gap-2">
                 <FaChartBar className="text-blue-500" />
                 Konsumsi kWh &mdash; {
-                  usageView === "daily" ? `${monthNames[usageMonth - 1]} ${usageYear}` :
+                  usageView === "daily" ? `${MONTH_NAMES[usageMonth - 1]} ${usageYear}` :
                   usageView === "monthly" ? `Tahun ${usageYear}` :
                   "5 Tahun Terakhir"
                 }
+
                 {/* Live badge — tampil saat melihat bulan ini & device online */}
                 {isCurrentMonth && status === "ONLINE" && usageView !== "yearly" && (
                   <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-700">
@@ -775,10 +779,11 @@ const PowerDashboard: React.FC = () => {
                   {/* Label */}
                   <span className="text-sm font-semibold px-2 min-w-[120px] text-center text-gray-800 dark:text-gray-100">
                     {usageView === "daily"
-                      ? `${monthNames[usageMonth - 1]} ${usageYear}`
+                      ? `${MONTH_NAMES[usageMonth - 1]} ${usageYear}`
                       : `Tahun ${usageYear}`
                     }
                   </span>
+
 
                   {/* Next button — disabled if future */}
                   <button
