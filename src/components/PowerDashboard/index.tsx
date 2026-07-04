@@ -417,13 +417,19 @@ const PowerDashboard: React.FC = () => {
 
     // Default: kWh / Power (W)
     if (usageView === "minutely" && minutelyUsage) {
-      return [{ name: "Daya Rata-Rata (W)", data: minutelyUsage.minutes.map(m => m.avgPower) }];
+      return [{
+        name: "Daya Rata-Rata (W)",
+        data: minutelyUsage.minutes.map(m => (m.avgVoltage < 10 || m.avgPower === 0) ? 4 : m.avgPower)
+      }];
     }
     if (usageView === "hourly" && hourlyUsage) {
-      return [{ name: "Konsumsi (kWh)", data: hourlyUsage.hours.map(h => parseFloat(h.usageKwh.toFixed(4))) }];
+      return [{
+        name: "Konsumsi (kWh)",
+        data: hourlyUsage.hours.map(h => (h.avgVoltage < 10 || h.avgPower === 0) ? 0.005 : parseFloat(h.usageKwh.toFixed(4)))
+      }];
     }
     if (usageView === "daily" && dailyUsage) {
-      const data = dailyUsage.days.map(d => parseFloat(d.usageKwh.toFixed(3)));
+      const data = dailyUsage.days.map(d => (d.avgVoltage !== undefined && d.avgVoltage < 10 && d.usageKwh === 0) ? 0.005 : parseFloat(d.usageKwh.toFixed(3)));
       if (todayLiveUsage !== null) {
         data.push(todayLiveUsage.kwh);
       }
@@ -457,21 +463,28 @@ const PowerDashboard: React.FC = () => {
     return [];
   }, [usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, todayDateLabel]);
 
-  // Colors per bar: orange = reset day, amber = live today, cyan = minutely, violet = hourly, blue = normal
+  // Colors per bar: red = outage (0V/0W), orange = reset day, amber = live today, cyan = minutely, violet = hourly, blue = normal
   const usageBarColors = useMemo(() => {
     if (selectedUsageMetric === "voltage") return ["#3b82f6"];
     if (selectedUsageMetric === "current") return ["#ef4444"];
-    if (usageView === "minutely") return ["#06b6d4"];
-    if (usageView === "hourly") return ["#8b5cf6"];
+    if (usageView === "minutely" && minutelyUsage) {
+      return minutelyUsage.minutes.map(m => (m.avgVoltage < 10 || m.avgPower === 0) ? "#ef4444" : "#06b6d4");
+    }
+    if (usageView === "hourly" && hourlyUsage) {
+      return hourlyUsage.hours.map(h => (h.avgVoltage < 10 || h.avgPower === 0) ? "#ef4444" : "#8b5cf6");
+    }
     if (usageView === "daily" && dailyUsage) {
-      const colors: string[] = dailyUsage.days.map(d => d.isResetDay ? "#f97316" : "#3b82f6");
+      const colors: string[] = dailyUsage.days.map(d => {
+        if (d.avgVoltage !== undefined && d.avgVoltage > 0 && d.avgVoltage < 10) return "#ef4444";
+        return d.isResetDay ? "#f97316" : "#3b82f6";
+      });
       if (todayLiveUsage !== null) {
         colors.push(todayLiveUsage.isReset ? "#f97316" : "#f59e0b"); // amber = live hari ini
       }
       return colors;
     }
     return undefined;
-  }, [selectedUsageMetric, usageView, dailyUsage, todayLiveUsage]);
+  }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, todayLiveUsage]);
 
   const usageSummary = useMemo(() => {
     const liveAdd = (isCurrentMonth && todayLiveUsage) ? todayLiveUsage.kwh : 0;
@@ -514,9 +527,9 @@ const PowerDashboard: React.FC = () => {
     },
     plotOptions: {
       bar: {
-        borderRadius: 6,
+        borderRadius: 4,
         columnWidth: usageView === "yearly" ? "40%" : usageView === "monthly" ? "50%" : "70%",
-        distributed: selectedUsageMetric === "kwh" && usageView === "daily",
+        distributed: true,
       },
     },
     colors: usageBarColors ?? ["#3b82f6"],
@@ -541,7 +554,19 @@ const PowerDashboard: React.FC = () => {
     tooltip: {
       theme: isDarkMode ? 'dark' : 'light',
       y: {
-        formatter: (val: number) => {
+        formatter: (val: number, { dataPointIndex }: any) => {
+          if (usageView === "minutely" && minutelyUsage?.minutes?.[dataPointIndex]) {
+            const m = minutelyUsage.minutes[dataPointIndex];
+            if (m.avgVoltage < 10 || m.avgPower === 0) {
+              return `⚡ MATI LISTRIK (0.0 V / 0 W)`;
+            }
+          }
+          if (usageView === "hourly" && hourlyUsage?.hours?.[dataPointIndex]) {
+            const h = hourlyUsage.hours[dataPointIndex];
+            if (h.avgVoltage < 10 || h.avgPower === 0) {
+              return `⚡ MATI LISTRIK (0.0 V / 0 W)`;
+            }
+          }
           if (selectedUsageMetric === "voltage") return `${val.toFixed(1)} V`;
           if (selectedUsageMetric === "current") return `${val.toFixed(2)} A`;
           return usageView === "minutely" ? `${val.toFixed(1)} W` : `${val.toFixed(3)} kWh`;
@@ -550,7 +575,7 @@ const PowerDashboard: React.FC = () => {
     },
     legend: { show: false },
     theme: { mode: isDarkMode ? 'dark' : 'light' }
-  }), [isDarkMode, usageChartCategories, usageBarColors, usageView, selectedUsageMetric]);
+  }), [isDarkMode, usageChartCategories, usageBarColors, usageView, selectedUsageMetric, minutelyUsage, hourlyUsage]);
 
 
   // Live Trend Options
@@ -1250,6 +1275,10 @@ const PowerDashboard: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 rounded-sm bg-orange-500 flex-shrink-0" />
                     <span className="text-xs text-gray-600 dark:text-gray-300">Hari reset kWh</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-sm bg-red-500 flex-shrink-0" />
+                    <span className="text-xs text-gray-600 dark:text-gray-300">Mati Listrik (0V/0W)</span>
                   </div>
                 </div>
               </div>
