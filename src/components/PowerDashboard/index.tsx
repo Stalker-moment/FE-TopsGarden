@@ -439,8 +439,9 @@ const PowerDashboard: React.FC = () => {
         return [{ name: "Tegangan Rata-Rata (V)", data: hourlyUsage.hours.map(h => h.avgVoltage || 0) }];
       }
       if (usageView === "daily" && dailyUsage) {
-        const hasToday = dailyUsage.days.some(d => d.date === todayDateStr);
-        const data = dailyUsage.days.map(d => d.date === todayDateStr ? displayData.voltage : (d.avgVoltage || 0));
+        const isTodayItem = (d: any) => d.dateLabel === todayDateLabel;
+        const hasToday = dailyUsage.days.some(isTodayItem);
+        const data = dailyUsage.days.map(d => isTodayItem(d) ? displayData.voltage : (d.avgVoltage || 0));
         if (!hasToday && todayLiveUsage !== null && isCurrentMonth) data.push(displayData.voltage);
         return [{ name: "Tegangan Rata-Rata (V)", data }];
       }
@@ -460,8 +461,9 @@ const PowerDashboard: React.FC = () => {
         return [{ name: "Arus Rata-Rata (A)", data: hourlyUsage.hours.map(h => (h.avgPower && h.avgVoltage ? parseFloat((h.avgPower / h.avgVoltage).toFixed(2)) : 0)) }];
       }
       if (usageView === "daily" && dailyUsage) {
-        const hasToday = dailyUsage.days.some(d => d.date === todayDateStr);
-        const data = dailyUsage.days.map(d => d.date === todayDateStr ? displayData.current : (d.avgCurrent || 0));
+        const isTodayItem = (d: any) => d.dateLabel === todayDateLabel;
+        const hasToday = dailyUsage.days.some(isTodayItem);
+        const data = dailyUsage.days.map(d => isTodayItem(d) ? displayData.current : (d.avgCurrent || 0));
         if (!hasToday && todayLiveUsage !== null && isCurrentMonth) data.push(displayData.current);
         return [{ name: "Arus Rata-Rata (A)", data }];
       }
@@ -508,9 +510,10 @@ const PowerDashboard: React.FC = () => {
     }
     if (usageView === "daily" && dailyUsage) {
       const nowMs = Date.now();
-      const hasToday = dailyUsage.days.some(d => d.date === todayDateStr);
+      const isTodayItem = (d: any) => d.dateLabel === todayDateLabel;
+      const hasToday = dailyUsage.days.some(isTodayItem);
       const data = dailyUsage.days.map(d => {
-        if (d.date === todayDateStr && todayLiveUsage !== null && isCurrentMonth) {
+        if (isTodayItem(d) && todayLiveUsage !== null && isCurrentMonth) {
           return todayLiveUsage.kwh;
         }
         const dayDate = new Date(d.date);
@@ -541,13 +544,14 @@ const PowerDashboard: React.FC = () => {
       return [{ name: "Konsumsi (kWh)", data: yearlyUsage.years.map(y => y.usageKwh) }];
     }
     return [{ name: "Konsumsi (kWh)", data: [] }];
-  }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, displayData, isCurrentMonth, currentMonthNum, getOutageSummaryForRange, usageYear, usageMonth, usageDay, usageHour, todayDateStr]);
+  }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, displayData, isCurrentMonth, currentMonthNum, getOutageSummaryForRange, usageYear, usageMonth, usageDay, usageHour, todayDateLabel]);
 
   const usageChartCategories = useMemo(() => {
     if (usageView === "minutely" && minutelyUsage) return minutelyUsage.minutes.map(m => m.label);
     if (usageView === "hourly" && hourlyUsage) return hourlyUsage.hours.map(h => h.label);
     if (usageView === "daily" && dailyUsage) {
-      const hasToday = dailyUsage.days.some(d => d.date === todayDateStr);
+      const isTodayItem = (d: any) => d.dateLabel === todayDateLabel;
+      const hasToday = dailyUsage.days.some(isTodayItem);
       const cats = dailyUsage.days.map(d => d.dateLabel);
       if (!hasToday && todayLiveUsage !== null && isCurrentMonth) cats.push(`${todayDateLabel}`);
       return cats;
@@ -555,7 +559,7 @@ const PowerDashboard: React.FC = () => {
     if (usageView === "monthly" && monthlyUsage) return monthlyUsage.months.map(m => m.label);
     if (usageView === "yearly" && yearlyUsage) return yearlyUsage.years.map(y => String(y.year));
     return [];
-  }, [usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, todayDateLabel, todayDateStr, isCurrentMonth]);
+  }, [usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, todayDateLabel, isCurrentMonth]);
 
   // Colors per bar: red = outage (0V/0W), orange = reset day, amber = live today, cyan = minutely, violet = hourly, blue = normal
   const usageBarColors = useMemo(() => {
@@ -585,9 +589,10 @@ const PowerDashboard: React.FC = () => {
     }
     if (usageView === "daily" && dailyUsage) {
       const nowMs = Date.now();
-      const hasToday = dailyUsage.days.some(d => d.date === todayDateStr);
+      const isTodayItem = (d: any) => d.dateLabel === todayDateLabel;
+      const hasToday = dailyUsage.days.some(isTodayItem);
       const colors: string[] = dailyUsage.days.map(d => {
-        if (d.date === todayDateStr && todayLiveUsage !== null && isCurrentMonth) {
+        if (isTodayItem(d) && todayLiveUsage !== null && isCurrentMonth) {
           return todayLiveUsage.isReset ? "#f97316" : "#f59e0b"; // amber = live hari ini
         }
         const dayDate = new Date(d.date);
@@ -607,7 +612,7 @@ const PowerDashboard: React.FC = () => {
       return colors;
     }
     return undefined;
-  }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, todayLiveUsage, getOutageSummaryForRange, usageYear, usageMonth, usageDay, usageHour, todayDateStr, isCurrentMonth]);
+  }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, todayLiveUsage, getOutageSummaryForRange, usageYear, usageMonth, usageDay, usageHour, todayDateLabel, isCurrentMonth]);
 
   const usageSummary = useMemo(() => {
     const liveAdd = (isCurrentMonth && todayLiveUsage) ? todayLiveUsage.kwh : 0;
