@@ -1476,7 +1476,7 @@ const PowerDashboard: React.FC = () => {
 
           {/* Bar Chart */}
           <div className="relative z-10" style={{ minHeight: 260 }}>
-            {usageLoading ? (
+            {usageLoading && usageChartSeries[0].data.length === 0 ? (
               <div className="h-[260px] flex items-center justify-center text-gray-400 dark:text-gray-600">
                 <div className="flex flex-col items-center gap-3">
                   <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
