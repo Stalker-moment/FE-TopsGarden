@@ -25,7 +25,11 @@ import {
   FaMemory,
   FaCheckCircle,
   FaArrowLeft,
-  FaArrowRight
+  FaArrowRight,
+  FaExpand,
+  FaCompress,
+  FaMobileAlt,
+  FaTimes
 } from "react-icons/fa";
 import { MdElectricBolt } from "react-icons/md";
 import { ApexOptions } from "apexcharts";
@@ -136,6 +140,21 @@ const PowerDashboard: React.FC = () => {
 
   // Chart toggles
   const [activeMetrics, setActiveMetrics] = useState({ power: true, voltage: false, current: false });
+
+  // Fullscreen modal state
+  const [fullscreenChart, setFullscreenChart] = useState<"usage" | "trend" | null>(null);
+
+  useEffect(() => {
+    if (fullscreenChart) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [fullscreenChart]);
+
 
   // WebSocket Reference
   const wsRef = useRef<WebSocket | null>(null);
@@ -521,6 +540,45 @@ const PowerDashboard: React.FC = () => {
     theme: { mode: isDarkMode ? 'dark' : 'light' }
   };
 
+  // Fullscreen Usage Options
+  const fullscreenUsageOptions: ApexOptions = useMemo(() => ({
+    ...usageChartOptions,
+    chart: {
+      ...usageChartOptions.chart,
+      toolbar: { show: true, tools: { download: true, selection: true, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } }
+    },
+    dataLabels: {
+      enabled: true,
+      style: { fontSize: '11px', colors: ['#ffffff'] },
+      formatter: (val: number) => usageView === "minutely" ? `${val.toFixed(0)}W` : `${val.toFixed(2)}`
+    },
+    xaxis: {
+      ...usageChartOptions.xaxis,
+      labels: {
+        style: { colors: '#9ca3af', fontSize: '12px' },
+        rotate: usageView === "daily" || usageView === "minutely" ? -45 : 0
+      }
+    },
+    yaxis: {
+      labels: {
+        style: { colors: '#9ca3af', fontSize: '12px' },
+        formatter: (val: number) => usageView === "minutely" ? `${val.toFixed(1)} W` : `${val.toFixed(2)} kWh`
+      }
+    },
+    theme: { mode: 'dark' }
+  }), [usageChartOptions, usageView]);
+
+  // Fullscreen Trend Options
+  const fullscreenTrendOptions: ApexOptions = useMemo(() => ({
+    ...powerTrendOptions,
+    chart: {
+      ...powerTrendOptions.chart,
+      toolbar: { show: true, tools: { download: true, selection: true, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } }
+    },
+    theme: { mode: 'dark' }
+  }), [powerTrendOptions]);
+
+
   // Battery color helper
   const batteryColor = serverBattery?.percent !== undefined
     ? serverBattery.percent >= 50 ? "text-green-500" : serverBattery.percent >= 20 ? "text-yellow-500" : "text-red-500"
@@ -713,17 +771,24 @@ const PowerDashboard: React.FC = () => {
                 <h3 className="text-xl font-bold flex items-center gap-2 mb-1"><FaChartLine className="text-yellow-500 dark:text-yellow-400"/> Live Trend</h3>
                 <p className="text-gray-500 dark:text-gray-400 text-sm">Real-time fluctuations.</p>
               </div>
-              <div className="flex gap-2">
-                {[['power','Power','yellow'],['voltage','Voltage','blue'],['current','Current','red']].map(([key, label, col]) => (
-                  <button key={key} onClick={() => setActiveMetrics(p => ({ ...p, [key]: !p[key as keyof typeof p] }))}
-                    className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors border ${
-                      activeMetrics[key as keyof typeof activeMetrics]
-                        ? `bg-${col}-100 dark:bg-${col}-900/30 text-${col}-700 dark:text-${col}-400 border-${col}-300 dark:border-${col}-700`
-                        : 'bg-transparent text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800'
-                    }`}>
-                    {label}
-                  </button>
-                ))}
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1.5 overflow-x-auto max-w-full no-scrollbar">
+                  {[["power","Power","yellow"],["voltage","Voltage","blue"],["current","Current","red"]].map(([key, label, col]) => (
+                    <button key={key} onClick={() => setActiveMetrics(p => ({ ...p, [key]: !p[key as keyof typeof p] }))}
+                      className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors border ${
+                        activeMetrics[key as keyof typeof activeMetrics]
+                          ? `bg-${col}-100 dark:bg-${col}-900/30 text-${col}-700 dark:text-${col}-400 border-${col}-300 dark:border-${col}-700`
+                          : 'bg-transparent text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800'
+                      }`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => setFullscreenChart("trend")}
+                  className="p-2 rounded-xl bg-gray-100 dark:bg-gray-700/70 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 transition-colors shrink-0"
+                  title="Buka Fullscreen Landscape">
+                  <FaExpand size={13} />
+                </button>
               </div>
             </div>
             <div className="h-[200px] -mx-2 md:-mx-4 relative z-10">
@@ -786,11 +851,11 @@ const PowerDashboard: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2">
 
               {/* Toggle View */}
-              <div className="flex bg-gray-100 dark:bg-gray-700/60 rounded-xl p-1 gap-1">
+              <div className="flex bg-gray-100 dark:bg-gray-700/60 rounded-xl p-1 gap-1 overflow-x-auto max-w-full no-scrollbar shrink-0">
                 {(["minutely", "hourly", "daily", "monthly", "yearly"] as UsageView[]).map(v => (
                   <button key={v}
                     onClick={() => setUsageView(v)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
                       usageView === v
                         ? "bg-blue-600 text-white shadow-sm"
                         : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
@@ -802,7 +867,7 @@ const PowerDashboard: React.FC = () => {
 
               {/* Period Navigator — arrows + label */}
               {usageView !== "yearly" && (
-                <div className="flex items-center gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-2 py-1">
+                <div className="flex items-center gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-2 py-1 shrink-0">
                   {/* Prev button */}
                   <button
                     onClick={() => {
@@ -906,7 +971,7 @@ const PowerDashboard: React.FC = () => {
               <button
                 onClick={fetchUsageData}
                 disabled={usageLoading}
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50 flex items-center gap-1.5 shrink-0"
               >
                 {usageLoading ? (
                   <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin inline-block" />
@@ -914,6 +979,15 @@ const PowerDashboard: React.FC = () => {
                   "↻"
                 )}
                 Refresh
+              </button>
+
+              {/* Fullscreen Expand Button */}
+              <button
+                onClick={() => setFullscreenChart("usage")}
+                className="p-2 rounded-xl bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-800/50 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 transition-colors shrink-0"
+                title="Buka Fullscreen Landscape"
+              >
+                <FaExpand size={13} />
               </button>
             </div>
           </div>
@@ -1255,6 +1329,112 @@ const PowerDashboard: React.FC = () => {
             </table>
           </div>
         </motion.div>
+
+        {/* ══════════════════════════════════════════ */}
+        {/* Fullscreen Landscape Modal View           */}
+        {/* ══════════════════════════════════════════ */}
+        <AnimatePresence>
+          {fullscreenChart && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-[9999] bg-gray-950/95 backdrop-blur-2xl p-4 md:p-6 flex flex-col justify-between text-white overflow-hidden"
+            >
+              {/* Header Bar */}
+              <div className="flex items-center justify-between gap-4 pb-3 border-b border-gray-800 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-blue-600/30 text-blue-400 border border-blue-500/40 shrink-0">
+                    {fullscreenChart === "usage" ? <FaChartBar size={18} /> : <FaChartLine size={18} />}
+                  </div>
+                  <div>
+                    <h2 className="text-sm md:text-lg font-bold flex items-center gap-2">
+                      {fullscreenChart === "usage" ? (
+                        <>Grafik Konsumsi &mdash; {
+                          usageView === "minutely" ? `Jam ${String(usageHour).padStart(2,'0')}:00, ${usageDay} ${MONTH_NAMES[usageMonth - 1]}` :
+                          usageView === "hourly" ? `24 Jam (${usageDay} ${MONTH_NAMES[usageMonth - 1]} ${usageYear})` :
+                          usageView === "daily" ? `${MONTH_NAMES[usageMonth - 1]} ${usageYear}` :
+                          usageView === "monthly" ? `Tahun ${usageYear}` :
+                          "5 Tahun Terakhir"
+                        }</>
+                      ) : (
+                        "Live Power Trend (Real-time)"
+                      )}
+                    </h2>
+                    <p className="text-xs text-gray-400 hidden sm:block">
+                      {fullscreenChart === "usage" 
+                        ? `Total: ${usageSummary.totalKwh.toFixed(3)} kWh (${costFormat(usageSummary.estimatedCost)})`
+                        : `Current Load: ${displayData.power.toFixed(1)} W · Voltage: ${displayData.voltage.toFixed(1)} V`
+                      }
+                    </p>
+                  </div>
+                </div>
+
+                {/* Landscape Indicator Badge */}
+                <div className="hidden lg:flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/60 border border-cyan-800/60 text-cyan-300 text-xs font-semibold">
+                  <FaMobileAlt className="animate-bounce" />
+                  <span>Putar layar ke <strong>Landscape</strong> untuk tampilan grafik penuh</span>
+                </div>
+
+                {/* Controls & Close Button */}
+                <div className="flex items-center gap-2">
+                  {fullscreenChart === "usage" ? (
+                    <div className="hidden sm:flex bg-gray-800/80 rounded-xl p-1 gap-1">
+                      {(["minutely", "hourly", "daily", "monthly", "yearly"] as UsageView[]).map(v => (
+                        <button key={v} onClick={() => setUsageView(v)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                            usageView === v ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"
+                          }`}>
+                          {v === "minutely" ? "1 Jam" : v === "hourly" ? "24 Jam" : v === "daily" ? "Harian" : v === "monthly" ? "Bulanan" : "Tahunan"}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex gap-1.5">
+                      {[["power","Power","yellow"],["voltage","Voltage","blue"],["current","Current","red"]].map(([key, label, col]) => (
+                        <button key={key} onClick={() => setActiveMetrics(p => ({ ...p, [key]: !p[key as keyof typeof p] }))}
+                          className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors border ${
+                            activeMetrics[key as keyof typeof activeMetrics]
+                              ? `bg-${col}-900/40 text-${col}-400 border-${col}-700`
+                              : "bg-transparent text-gray-500 border-gray-700"
+                          }`}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => setFullscreenChart(null)}
+                    className="p-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition-colors border border-gray-700 shrink-0"
+                    title="Tutup Fullscreen"
+                  >
+                    <FaCompress size={16} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Landscape Suggestion Notice on Small Mobile Portrait */}
+              <div className="sm:hidden mt-2 p-2 rounded-xl bg-cyan-950/40 border border-cyan-800/40 flex items-center justify-between text-xs text-cyan-300 shrink-0">
+                <span className="flex items-center gap-1.5">
+                  <FaMobileAlt className="text-cyan-400 animate-pulse" />
+                  <span>Mode Landscape disarankan</span>
+                </span>
+                <span className="text-[10px] bg-cyan-900/60 px-2 py-0.5 rounded-full border border-cyan-700">Rotasi Layar HP</span>
+              </div>
+
+              {/* Chart Body */}
+              <div className="flex-1 w-full mt-3 min-h-0 relative">
+                {fullscreenChart === "usage" ? (
+                  <ReactApexChart options={fullscreenUsageOptions} series={usageChartSeries} type="bar" height="100%" />
+                ) : (
+                  <ReactApexChart options={fullscreenTrendOptions} series={powerTrendSeries} type="area" height="100%" />
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
       </div>
     </div>
