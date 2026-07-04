@@ -95,6 +95,44 @@ export interface PzemYearlyUsageResponse {
   years: PzemYearlyUsageItem[];
 }
 
+export interface PzemHourlyUsageItem {
+  hour: number;
+  label: string;
+  avgPower: number;
+  maxPower: number;
+  avgVoltage: number;
+  usageKwh: number;
+  count: number;
+}
+
+export interface PzemHourlyUsageResponse {
+  date: string;
+  totalKwh: number;
+  estimatedCost: number;
+  plnRate: number;
+  hours: PzemHourlyUsageItem[];
+}
+
+export interface PzemMinutelyUsageItem {
+  minute: number;
+  label: string;
+  avgPower: number;
+  avgVoltage: number;
+  avgCurrent: number;
+  usageKwh: number;
+  count: number;
+}
+
+export interface PzemMinutelyUsageResponse {
+  date: string;
+  hour: number;
+  totalKwh: number;
+  estimatedCost: number;
+  plnRate: number;
+  minutes: PzemMinutelyUsageItem[];
+}
+
+
 // === Tipe Baru: Power Outage Log (Matlis) ===
 
 export interface PowerOutageLogItem {

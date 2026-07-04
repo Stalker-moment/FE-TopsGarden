@@ -31,9 +31,11 @@ import { MdElectricBolt } from "react-icons/md";
 import { ApexOptions } from "apexcharts";
 import { 
   PzemData, PzemDevice, PzemLog,
+  PzemHourlyUsageResponse, PzemMinutelyUsageResponse,
   PzemDailyUsageResponse, PzemMonthlyUsageResponse, PzemYearlyUsageResponse,
   PowerOutageLogsResponse, PowerOutageLogItem, ServerBatteryInfo
 } from "@/types/pzem";
+
 import DeviceSettingsModal from "./DeviceSettingsModal";
 import ConfirmationModal from "./ConfirmationModal";
 
@@ -108,14 +110,20 @@ const PowerDashboard: React.FC = () => {
   const [maxPowerLimit, setMaxPowerLimit] = useState<number | ''>(450);
 
   // === kWh Usage Chart State ===
-  type UsageView = "daily" | "monthly" | "yearly";
+  type UsageView = "minutely" | "hourly" | "daily" | "monthly" | "yearly";
   const [usageView, setUsageView] = useState<UsageView>("daily");
   const [usageYear, setUsageYear] = useState(new Date().getFullYear());
   const [usageMonth, setUsageMonth] = useState(new Date().getMonth() + 1);
+  const [usageDay, setUsageDay] = useState(new Date().getDate());
+  const [usageHour, setUsageHour] = useState(new Date().getHours());
+
+  const [minutelyUsage, setMinutelyUsage] = useState<PzemMinutelyUsageResponse | null>(null);
+  const [hourlyUsage, setHourlyUsage] = useState<PzemHourlyUsageResponse | null>(null);
   const [dailyUsage, setDailyUsage] = useState<PzemDailyUsageResponse | null>(null);
   const [monthlyUsage, setMonthlyUsage] = useState<PzemMonthlyUsageResponse | null>(null);
   const [yearlyUsage, setYearlyUsage] = useState<PzemYearlyUsageResponse | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
+
 
   // === Outage Log State ===
   const [outageLogs, setOutageLogs] = useState<PowerOutageLogItem[]>([]);
@@ -216,7 +224,14 @@ const PowerDashboard: React.FC = () => {
     if (!selectedDeviceId) return;
     setUsageLoading(true);
     try {
-      if (usageView === "daily") {
+      const dateStr = `${usageYear}-${String(usageMonth).padStart(2, '0')}-${String(usageDay).padStart(2, '0')}`;
+      if (usageView === "minutely") {
+        const res = await fetch(`${API_URL}/api/device/pzem/${selectedDeviceId}/minutely-usage?date=${dateStr}&hour=${usageHour}`);
+        if (res.ok) setMinutelyUsage(await res.json());
+      } else if (usageView === "hourly") {
+        const res = await fetch(`${API_URL}/api/device/pzem/${selectedDeviceId}/hourly-usage?date=${dateStr}`);
+        if (res.ok) setHourlyUsage(await res.json());
+      } else if (usageView === "daily") {
         const res = await fetch(`${API_URL}/api/device/pzem/${selectedDeviceId}/daily-usage?year=${usageYear}&month=${usageMonth}`);
         if (res.ok) setDailyUsage(await res.json());
       } else if (usageView === "monthly") {
@@ -228,9 +243,10 @@ const PowerDashboard: React.FC = () => {
       }
     } catch (e) { console.error("Usage fetch error", e); }
     setUsageLoading(false);
-  }, [selectedDeviceId, usageView, usageYear, usageMonth]);
+  }, [selectedDeviceId, usageView, usageYear, usageMonth, usageDay, usageHour]);
 
   useEffect(() => { fetchUsageData(); }, [fetchUsageData]);
+
 
   // 5. Fetch Outage Logs
   const fetchOutageLogs = useCallback(async () => {
@@ -328,6 +344,12 @@ const PowerDashboard: React.FC = () => {
 
   // Usage chart series & categories (with live today bar injected)
   const usageChartSeries = useMemo(() => {
+    if (usageView === "minutely" && minutelyUsage) {
+      return [{ name: "Daya Rata-Rata (W)", data: minutelyUsage.minutes.map(m => m.avgPower) }];
+    }
+    if (usageView === "hourly" && hourlyUsage) {
+      return [{ name: "Konsumsi (kWh)", data: hourlyUsage.hours.map(h => parseFloat(h.usageKwh.toFixed(4))) }];
+    }
     if (usageView === "daily" && dailyUsage) {
       const data = dailyUsage.days.map(d => parseFloat(d.usageKwh.toFixed(3)));
       // Inject today's live bar (jika bulan ini dan ada realtime data)
@@ -350,9 +372,11 @@ const PowerDashboard: React.FC = () => {
       return [{ name: "Konsumsi (kWh)", data: yearlyUsage.years.map(y => y.usageKwh) }];
     }
     return [{ name: "Konsumsi (kWh)", data: [] }];
-  }, [usageView, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, isCurrentMonth, currentMonthNum]);
+  }, [usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, isCurrentMonth, currentMonthNum]);
 
   const usageChartCategories = useMemo(() => {
+    if (usageView === "minutely" && minutelyUsage) return minutelyUsage.minutes.map(m => m.label);
+    if (usageView === "hourly" && hourlyUsage) return hourlyUsage.hours.map(h => h.label);
     if (usageView === "daily" && dailyUsage) {
       const cats = dailyUsage.days.map(d => d.dateLabel);
       if (todayLiveUsage !== null) cats.push(`${todayDateLabel}`);
@@ -361,10 +385,12 @@ const PowerDashboard: React.FC = () => {
     if (usageView === "monthly" && monthlyUsage) return monthlyUsage.months.map(m => m.label);
     if (usageView === "yearly" && yearlyUsage) return yearlyUsage.years.map(y => String(y.year));
     return [];
-  }, [usageView, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, todayDateLabel]);
+  }, [usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, todayDateLabel]);
 
-  // Colors per bar: orange = reset day, amber = live today, blue = normal
+  // Colors per bar: orange = reset day, amber = live today, cyan = minutely, violet = hourly, blue = normal
   const usageBarColors = useMemo(() => {
+    if (usageView === "minutely") return ["#06b6d4"];
+    if (usageView === "hourly") return ["#8b5cf6"];
     if (usageView === "daily" && dailyUsage) {
       const colors: string[] = dailyUsage.days.map(d => d.isResetDay ? "#f97316" : "#3b82f6");
       if (todayLiveUsage !== null) {
@@ -377,6 +403,20 @@ const PowerDashboard: React.FC = () => {
 
   const usageSummary = useMemo(() => {
     const liveAdd = (isCurrentMonth && todayLiveUsage) ? todayLiveUsage.kwh : 0;
+    if (usageView === "minutely" && minutelyUsage) {
+      return {
+        total: minutelyUsage.totalKwh,
+        cost: minutelyUsage.estimatedCost,
+        label: `Jam ${String(usageHour).padStart(2, '0')}:00, ${usageDay} ${MONTH_NAMES[usageMonth - 1]}`
+      };
+    }
+    if (usageView === "hourly" && hourlyUsage) {
+      return {
+        total: hourlyUsage.totalKwh,
+        cost: hourlyUsage.estimatedCost,
+        label: `24 Jam — ${usageDay} ${MONTH_NAMES[usageMonth - 1]} ${usageYear}`
+      };
+    }
     if (usageView === "daily" && dailyUsage) {
       const total = parseFloat((dailyUsage.totalKwh + liveAdd).toFixed(3));
       return { total, cost: parseFloat((total * PLN_RATE).toFixed(0)), label: `${MONTH_NAMES[usageMonth - 1]} ${usageYear}` };
@@ -390,7 +430,8 @@ const PowerDashboard: React.FC = () => {
       return { total: parseFloat(total.toFixed(3)), cost: parseFloat((total * PLN_RATE).toFixed(0)), label: "5 Tahun Terakhir" };
     }
     return { total: 0, cost: 0, label: "" };
-  }, [usageView, dailyUsage, monthlyUsage, yearlyUsage, usageYear, usageMonth, todayLiveUsage, isCurrentMonth]);
+  }, [usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, usageYear, usageMonth, usageDay, usageHour, todayLiveUsage, isCurrentMonth]);
+
 
 
 
@@ -715,7 +756,9 @@ const PowerDashboard: React.FC = () => {
             <div>
               <h3 className="text-xl font-bold flex items-center gap-2">
                 <FaChartBar className="text-blue-500" />
-                Konsumsi kWh &mdash; {
+                Konsumsi &mdash; {
+                  usageView === "minutely" ? `Jam ${String(usageHour).padStart(2,'0')}:00, ${usageDay} ${MONTH_NAMES[usageMonth - 1]}` :
+                  usageView === "hourly" ? `24 Jam (${usageDay} ${MONTH_NAMES[usageMonth - 1]} ${usageYear})` :
                   usageView === "daily" ? `${MONTH_NAMES[usageMonth - 1]} ${usageYear}` :
                   usageView === "monthly" ? `Tahun ${usageYear}` :
                   "5 Tahun Terakhir"
@@ -730,7 +773,10 @@ const PowerDashboard: React.FC = () => {
                 )}
               </h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {usageView === "daily" ? "Konsumsi harian dari snapshot tengah malam. " : usageView === "monthly" ? "Total konsumsi per bulan. " : "Total konsumsi per tahun. "}
+                {usageView === "minutely" ? "Rata-rata daya & konsumsi per-menit dalam 1 jam. " :
+                 usageView === "hourly" ? "Rata-rata daya & konsumsi per-jam dalam 24 jam. " :
+                 usageView === "daily" ? "Konsumsi harian dari snapshot tengah malam. " :
+                 usageView === "monthly" ? "Total konsumsi per bulan. " : "Total konsumsi per tahun. "}
                 <span className="text-orange-500 font-semibold">Bar oranye = hari/bulan reset kWh.</span>
               </p>
             </div>
@@ -740,7 +786,7 @@ const PowerDashboard: React.FC = () => {
 
               {/* Toggle View */}
               <div className="flex bg-gray-100 dark:bg-gray-700/60 rounded-xl p-1 gap-1">
-                {(["daily", "monthly", "yearly"] as UsageView[]).map(v => (
+                {(["minutely", "hourly", "daily", "monthly", "yearly"] as UsageView[]).map(v => (
                   <button key={v}
                     onClick={() => setUsageView(v)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
@@ -748,7 +794,7 @@ const PowerDashboard: React.FC = () => {
                         ? "bg-blue-600 text-white shadow-sm"
                         : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
                     }`}>
-                    {v === "daily" ? "Harian" : v === "monthly" ? "Bulanan" : "Tahunan"}
+                    {v === "minutely" ? "1 Jam" : v === "hourly" ? "24 Jam" : v === "daily" ? "Harian" : v === "monthly" ? "Bulanan" : "Tahunan"}
                   </button>
                 ))}
               </div>
@@ -759,14 +805,29 @@ const PowerDashboard: React.FC = () => {
                   {/* Prev button */}
                   <button
                     onClick={() => {
-                      if (usageView === "daily") {
+                      if (usageView === "minutely") {
+                        if (usageHour === 0) {
+                          setUsageHour(23);
+                          const dt = new Date(usageYear, usageMonth - 1, usageDay - 1);
+                          setUsageYear(dt.getFullYear());
+                          setUsageMonth(dt.getMonth() + 1);
+                          setUsageDay(dt.getDate());
+                        } else {
+                          setUsageHour(h => h - 1);
+                        }
+                      } else if (usageView === "hourly") {
+                        const dt = new Date(usageYear, usageMonth - 1, usageDay - 1);
+                        setUsageYear(dt.getFullYear());
+                        setUsageMonth(dt.getMonth() + 1);
+                        setUsageDay(dt.getDate());
+                      } else if (usageView === "daily") {
                         if (usageMonth === 1) {
                           setUsageMonth(12);
                           setUsageYear(y => y - 1);
                         } else {
                           setUsageMonth(m => m - 1);
                         }
-                      } else {
+                      } else if (usageView === "monthly") {
                         setUsageYear(y => y - 1);
                       }
                     }}
@@ -778,32 +839,60 @@ const PowerDashboard: React.FC = () => {
 
                   {/* Label */}
                   <span className="text-sm font-semibold px-2 min-w-[120px] text-center text-gray-800 dark:text-gray-100">
-                    {usageView === "daily"
-                      ? `${MONTH_NAMES[usageMonth - 1]} ${usageYear}`
-                      : `Tahun ${usageYear}`
+                    {usageView === "minutely" ? `${usageDay} ${MONTH_NAMES[usageMonth - 1]}, ${String(usageHour).padStart(2,'0')}:00` :
+                     usageView === "hourly" ? `${usageDay} ${MONTH_NAMES[usageMonth - 1]} ${usageYear}` :
+                     usageView === "daily" ? `${MONTH_NAMES[usageMonth - 1]} ${usageYear}` :
+                     `Tahun ${usageYear}`
                     }
                   </span>
-
 
                   {/* Next button — disabled if future */}
                   <button
                     onClick={() => {
-                      if (usageView === "daily") {
+                      if (usageView === "minutely") {
+                        if (usageHour === 23) {
+                          setUsageHour(0);
+                          const dt = new Date(usageYear, usageMonth - 1, usageDay + 1);
+                          setUsageYear(dt.getFullYear());
+                          setUsageMonth(dt.getMonth() + 1);
+                          setUsageDay(dt.getDate());
+                        } else {
+                          setUsageHour(h => h + 1);
+                        }
+                      } else if (usageView === "hourly") {
+                        const dt = new Date(usageYear, usageMonth - 1, usageDay + 1);
+                        setUsageYear(dt.getFullYear());
+                        setUsageMonth(dt.getMonth() + 1);
+                        setUsageDay(dt.getDate());
+                      } else if (usageView === "daily") {
                         if (usageMonth === 12) {
                           setUsageMonth(1);
                           setUsageYear(y => y + 1);
                         } else {
                           setUsageMonth(m => m + 1);
                         }
-                      } else {
+                      } else if (usageView === "monthly") {
                         setUsageYear(y => y + 1);
                       }
                     }}
-                    disabled={
-                      usageView === "daily"
-                        ? (usageYear === currentYear && usageMonth >= new Date().getMonth() + 1)
-                        : usageYear >= currentYear
-                    }
+                    disabled={(() => {
+                      const today = new Date();
+                      if (usageView === "minutely") {
+                        const sel = new Date(usageYear, usageMonth - 1, usageDay, usageHour);
+                        return sel >= new Date(today.getFullYear(), today.getMonth(), today.getDate(), today.getHours());
+                      }
+                      if (usageView === "hourly") {
+                        const sel = new Date(usageYear, usageMonth - 1, usageDay);
+                        return sel >= new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                      }
+                      if (usageView === "daily") {
+                        return usageYear === today.getFullYear() && usageMonth >= (today.getMonth() + 1);
+                      }
+                      if (usageView === "monthly") {
+                        return usageYear >= today.getFullYear();
+                      }
+                      return true;
+                    })()}
                     className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 dark:text-gray-400 disabled:opacity-30 disabled:cursor-not-allowed"
                     title="Berikutnya"
                   >
@@ -827,6 +916,7 @@ const PowerDashboard: React.FC = () => {
               </button>
             </div>
           </div>
+
 
           {/* Summary Cards */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6 relative z-10">
