@@ -373,6 +373,16 @@ const PowerDashboard: React.FC = () => {
     return null;
   }, [realtimeData, dailyUsage, isCurrentMonth]);
 
+  // Helper check if a timestamp (ms) falls into a recorded outage event
+  const isOutageAt = useCallback((timestampMs: number) => {
+    if (!outageLogs || outageLogs.length === 0) return false;
+    return outageLogs.some(log => {
+      const start = new Date(log.startedAt).getTime() - 60000;
+      const end = log.endedAt ? new Date(log.endedAt).getTime() + 60000 : Date.now();
+      return timestampMs >= start && timestampMs <= end;
+    });
+  }, [outageLogs]);
+
   // Usage chart series & categories (with live today bar injected)
   const usageChartSeries = useMemo(() => {
     if (selectedUsageMetric === "voltage") {
@@ -417,19 +427,43 @@ const PowerDashboard: React.FC = () => {
 
     // Default: kWh / Power (W)
     if (usageView === "minutely" && minutelyUsage) {
+      const nowMs = Date.now();
       return [{
         name: "Daya Rata-Rata (W)",
-        data: minutelyUsage.minutes.map(m => (m.avgVoltage < 10 || m.avgPower === 0) ? 4 : m.avgPower)
+        data: minutelyUsage.minutes.map(m => {
+          const minuteMs = new Date(usageYear, usageMonth - 1, usageDay, usageHour, m.minute).getTime();
+          const isFuture = minuteMs > nowMs;
+          if (isFuture) return 0; // Jam/menit masa depan: bukan matlis!
+          const isMatlis = isOutageAt(minuteMs) || (m.count > 0 && m.avgVoltage < 10);
+          if (isMatlis) return 4; // Visual red bar untuk matlis sungguhan
+          return m.avgPower;
+        })
       }];
     }
     if (usageView === "hourly" && hourlyUsage) {
+      const nowMs = Date.now();
       return [{
         name: "Konsumsi (kWh)",
-        data: hourlyUsage.hours.map(h => (h.avgVoltage < 10 || h.avgPower === 0) ? 0.005 : parseFloat(h.usageKwh.toFixed(4)))
+        data: hourlyUsage.hours.map(h => {
+          const hourMs = new Date(usageYear, usageMonth - 1, usageDay, h.hour).getTime();
+          const isFuture = hourMs > nowMs;
+          if (isFuture) return 0;
+          const isMatlis = isOutageAt(hourMs) || (h.count > 0 && h.avgVoltage < 10);
+          if (isMatlis) return 0.005;
+          return parseFloat(h.usageKwh.toFixed(4));
+        })
       }];
     }
     if (usageView === "daily" && dailyUsage) {
-      const data = dailyUsage.days.map(d => (d.avgVoltage !== undefined && d.avgVoltage < 10 && d.usageKwh === 0) ? 0.005 : parseFloat(d.usageKwh.toFixed(3)));
+      const nowMs = Date.now();
+      const data = dailyUsage.days.map(d => {
+        const dayMs = new Date(d.date).getTime();
+        const isFuture = dayMs > nowMs;
+        if (isFuture) return 0;
+        const isMatlis = isOutageAt(dayMs) || (d.avgVoltage !== undefined && d.avgVoltage > 0 && d.avgVoltage < 10 && d.usageKwh === 0);
+        if (isMatlis) return 0.005;
+        return parseFloat(d.usageKwh.toFixed(3));
+      });
       if (todayLiveUsage !== null) {
         data.push(todayLiveUsage.kwh);
       }
@@ -448,7 +482,7 @@ const PowerDashboard: React.FC = () => {
       return [{ name: "Konsumsi (kWh)", data: yearlyUsage.years.map(y => y.usageKwh) }];
     }
     return [{ name: "Konsumsi (kWh)", data: [] }];
-  }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, displayData, isCurrentMonth, currentMonthNum]);
+  }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, todayLiveUsage, displayData, isCurrentMonth, currentMonthNum, isOutageAt, usageYear, usageMonth, usageDay, usageHour]);
 
   const usageChartCategories = useMemo(() => {
     if (usageView === "minutely" && minutelyUsage) return minutelyUsage.minutes.map(m => m.label);
@@ -468,14 +502,30 @@ const PowerDashboard: React.FC = () => {
     if (selectedUsageMetric === "voltage") return ["#3b82f6"];
     if (selectedUsageMetric === "current") return ["#ef4444"];
     if (usageView === "minutely" && minutelyUsage) {
-      return minutelyUsage.minutes.map(m => (m.avgVoltage < 10 || m.avgPower === 0) ? "#ef4444" : "#06b6d4");
+      const nowMs = Date.now();
+      return minutelyUsage.minutes.map(m => {
+        const minuteMs = new Date(usageYear, usageMonth - 1, usageDay, usageHour, m.minute).getTime();
+        if (minuteMs > nowMs) return "#06b6d4"; // Jam/menit masa depan: cyan normal
+        const isMatlis = isOutageAt(minuteMs) || (m.count > 0 && m.avgVoltage < 10);
+        return isMatlis ? "#ef4444" : "#06b6d4";
+      });
     }
     if (usageView === "hourly" && hourlyUsage) {
-      return hourlyUsage.hours.map(h => (h.avgVoltage < 10 || h.avgPower === 0) ? "#ef4444" : "#8b5cf6");
+      const nowMs = Date.now();
+      return hourlyUsage.hours.map(h => {
+        const hourMs = new Date(usageYear, usageMonth - 1, usageDay, h.hour).getTime();
+        if (hourMs > nowMs) return "#8b5cf6";
+        const isMatlis = isOutageAt(hourMs) || (h.count > 0 && h.avgVoltage < 10);
+        return isMatlis ? "#ef4444" : "#8b5cf6";
+      });
     }
     if (usageView === "daily" && dailyUsage) {
+      const nowMs = Date.now();
       const colors: string[] = dailyUsage.days.map(d => {
-        if (d.avgVoltage !== undefined && d.avgVoltage > 0 && d.avgVoltage < 10) return "#ef4444";
+        const dayMs = new Date(d.date).getTime();
+        if (dayMs <= nowMs && (isOutageAt(dayMs) || (d.avgVoltage !== undefined && d.avgVoltage > 0 && d.avgVoltage < 10))) {
+          return "#ef4444";
+        }
         return d.isResetDay ? "#f97316" : "#3b82f6";
       });
       if (todayLiveUsage !== null) {
@@ -484,7 +534,7 @@ const PowerDashboard: React.FC = () => {
       return colors;
     }
     return undefined;
-  }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, todayLiveUsage]);
+  }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, todayLiveUsage, isOutageAt, usageYear, usageMonth, usageDay, usageHour]);
 
   const usageSummary = useMemo(() => {
     const liveAdd = (isCurrentMonth && todayLiveUsage) ? todayLiveUsage.kwh : 0;
@@ -555,15 +605,18 @@ const PowerDashboard: React.FC = () => {
       theme: isDarkMode ? 'dark' : 'light',
       y: {
         formatter: (val: number, { dataPointIndex }: any) => {
+          const nowMs = Date.now();
           if (usageView === "minutely" && minutelyUsage?.minutes?.[dataPointIndex]) {
             const m = minutelyUsage.minutes[dataPointIndex];
-            if (m.avgVoltage < 10 || m.avgPower === 0) {
+            const minuteMs = new Date(usageYear, usageMonth - 1, usageDay, usageHour, m.minute).getTime();
+            if (minuteMs <= nowMs && (isOutageAt(minuteMs) || (m.count > 0 && m.avgVoltage < 10))) {
               return `⚡ MATI LISTRIK (0.0 V / 0 W)`;
             }
           }
           if (usageView === "hourly" && hourlyUsage?.hours?.[dataPointIndex]) {
             const h = hourlyUsage.hours[dataPointIndex];
-            if (h.avgVoltage < 10 || h.avgPower === 0) {
+            const hourMs = new Date(usageYear, usageMonth - 1, usageDay, h.hour).getTime();
+            if (hourMs <= nowMs && (isOutageAt(hourMs) || (h.count > 0 && h.avgVoltage < 10))) {
               return `⚡ MATI LISTRIK (0.0 V / 0 W)`;
             }
           }
@@ -575,7 +628,7 @@ const PowerDashboard: React.FC = () => {
     },
     legend: { show: false },
     theme: { mode: isDarkMode ? 'dark' : 'light' }
-  }), [isDarkMode, usageChartCategories, usageBarColors, usageView, selectedUsageMetric, minutelyUsage, hourlyUsage]);
+  }), [isDarkMode, usageChartCategories, usageBarColors, usageView, selectedUsageMetric, minutelyUsage, hourlyUsage, isOutageAt, usageYear, usageMonth, usageDay, usageHour]);
 
 
   // Live Trend Options
