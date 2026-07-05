@@ -361,23 +361,36 @@ const PowerDashboard: React.FC = () => {
     const liveEnergy = realtimeData.energy;
 
     if (dailyUsage && dailyUsage.days.length > 0) {
-      // Ambil snapshot terakhir sebagai baseline (nilai energy pukul 00:00 hari terakhir)
-      const lastSnap = dailyUsage.days[dailyUsage.days.length - 1];
-      const base = lastSnap.energyKwh;
-
-      // Deteksi reset: jika live energy < snapshot terakhir → reset terjadi hari ini
-      if (liveEnergy < base) {
-        return { kwh: parseFloat(liveEnergy.toFixed(3)), isReset: true };
+      // Cari index hari ini (misal "05 Jul")
+      const todayIndex = dailyUsage.days.findIndex(d => d.dateLabel === todayDateLabel);
+      if (todayIndex >= 0) {
+        // Cari snapshot baseline dari hari kemarin / sebelumnya yang energyKwh > 0
+        let base = 0;
+        for (let i = todayIndex - 1; i >= 0; i--) {
+          if (dailyUsage.days[i].energyKwh > 0) {
+            base = dailyUsage.days[i].energyKwh;
+            break;
+          }
+        }
+        if (base > 0) {
+          if (liveEnergy < base) {
+            return { kwh: parseFloat(liveEnergy.toFixed(3)), isReset: true };
+          }
+          return { kwh: parseFloat((liveEnergy - base).toFixed(3)), isReset: false };
+        }
+        // Jika belum ada baseline snapshot sebelumnya, pakai usageKwh dari kalkulasi backend hari ini
+        const todayBackendKwh = dailyUsage.days[todayIndex].usageKwh;
+        if (todayBackendKwh > 0) {
+          return { kwh: parseFloat(todayBackendKwh.toFixed(3)), isReset: false };
+        }
       }
-      return { kwh: parseFloat(Math.max(0, liveEnergy - base).toFixed(3)), isReset: false };
     }
 
-    // Belum ada snapshot sama sekali (hari pertama) → energy saat ini = konsumsi hari ini
     if (liveEnergy > 0) {
       return { kwh: parseFloat(liveEnergy.toFixed(3)), isReset: false };
     }
     return null;
-  }, [realtimeData, dailyUsage, isCurrentMonth]);
+  }, [realtimeData, dailyUsage, isCurrentMonth, todayDateLabel]);
 
   // Helper check if a timestamp (ms) falls into a recorded outage event
   const isOutageAt = useCallback((timestampMs: number) => {
@@ -1497,116 +1510,7 @@ const PowerDashboard: React.FC = () => {
           </div>
         </motion.div>
 
-        {/* ══════════════════════════════════════════ */}
-        {/* Power Outage Log (Log Matlis) */}
-        {/* ══════════════════════════════════════════ */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-          className="mb-8 rounded-[2rem] bg-white/60 dark:bg-gray-800/60 backdrop-blur-md border border-white/50 dark:border-gray-700 overflow-hidden shadow-lg">
-          
-          <div className="px-6 md:px-8 py-5 bg-gradient-to-r from-red-600/10 via-orange-600/5 to-transparent border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-            <div>
-              <h3 className="text-xl font-bold flex items-center gap-2 text-gray-800 dark:text-white">
-                <span className="p-2 rounded-xl bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400">
-                  <FaExclamationTriangle size={14}/>
-                </span>
-                Log Mati Listrik (Matlis)
-              </h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-10">Tercatat otomatis saat tegangan &lt; 10V atau tidak ada sinyal.</p>
-            </div>
-            <div className="flex items-center gap-3">
-              {outageLogs.some(l => l.status === "BERLANGSUNG") && (
-                <span className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-700 animate-pulse">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                  Sedang Terjadi
-                </span>
-              )}
-              <span className="text-xs font-semibold px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                Total: {outageTotal} kejadian
-              </span>
-            </div>
-          </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-gray-50/80 dark:bg-gray-900/40 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-widest">
-                  <th className="py-3 px-5 font-bold">Mulai</th>
-                  <th className="py-3 px-5 font-bold">Selesai</th>
-                  <th className="py-3 px-5 font-bold">Durasi</th>
-                  <th className="py-3 px-5 font-bold">Tegangan Terakhir</th>
-                  <th className="py-3 px-5 font-bold">Status</th>
-                </tr>
-              </thead>
-              <tbody className="text-sm divide-y divide-gray-100 dark:divide-gray-700/50">
-                {outageLoading ? (
-                  <tr><td colSpan={5} className="py-8 text-center text-gray-400">Memuat...</td></tr>
-                ) : outageLogs.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="py-12 text-center">
-                      <div className="flex flex-col items-center gap-2 text-gray-400 dark:text-gray-600">
-                        <FaCheckCircle size={28} className="opacity-30" />
-                        <p className="text-sm font-medium">Tidak ada catatan mati listrik</p>
-                        <p className="text-xs">Sistem memantau setiap 30 detik</p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : outageLogs.map((log, idx) => (
-                  <tr key={log.id} className={`${idx % 2 === 0 ? 'bg-white/40 dark:bg-transparent' : 'bg-gray-50/60 dark:bg-gray-900/20'} hover:bg-red-50/40 dark:hover:bg-red-900/10 transition-colors`}>
-                    <td className="py-3.5 px-5">
-                      <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-lg">
-                        {new Date(log.startedAt).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-5">
-                      {log.endedAt ? (
-                        <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-lg">
-                          {new Date(log.endedAt).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-red-500 font-semibold animate-pulse">Belum selesai...</span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-5">
-                      <span className={`font-mono text-sm font-bold ${log.durationFormatted ? 'text-orange-600 dark:text-orange-400' : 'text-gray-400'}`}>
-                        {log.durationFormatted ?? "—"}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-5">
-                      <span className="text-blue-600 dark:text-blue-400 font-semibold">{log.lastVoltage.toFixed(1)} V</span>
-                    </td>
-                    <td className="py-3.5 px-5">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
-                        log.status === "BERLANGSUNG"
-                          ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800 animate-pulse'
-                          : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800'
-                      }`}>
-                        {log.status === "BERLANGSUNG" && <span className="w-1.5 h-1.5 rounded-full bg-red-500" />}
-                        {log.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          {outageTotal > 10 && (
-            <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
-              <span className="text-xs text-gray-500">Halaman {outagePage} dari {Math.ceil(outageTotal / 10)}</span>
-              <div className="flex gap-2">
-                <button disabled={outagePage === 1} onClick={() => setOutagePage(p => p - 1)}
-                  className="px-3 py-1.5 text-xs rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 transition-colors">
-                  ← Sebelumnya
-                </button>
-                <button disabled={outagePage >= Math.ceil(outageTotal / 10)} onClick={() => setOutagePage(p => p + 1)}
-                  className="px-3 py-1.5 text-xs rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 transition-colors">
-                  Berikutnya →
-                </button>
-              </div>
-            </div>
-          )}
-        </motion.div>
 
         {/* ══════════════════════════════════════════ */}
         {/* Server Battery Monitor */}
