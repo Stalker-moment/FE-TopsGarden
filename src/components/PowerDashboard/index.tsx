@@ -732,6 +732,13 @@ const PowerDashboard: React.FC = () => {
       y: {
         formatter: (val: number, { dataPointIndex }: any) => {
           const nowMs = Date.now();
+          
+          const formatVal = (v: number) => {
+            if (selectedUsageMetric === "voltage") return `${v.toFixed(1)} V`;
+            if (selectedUsageMetric === "current") return `${v.toFixed(2)} A`;
+            return usageView === "minutely" ? `${v.toFixed(1)} W` : `${v.toFixed(3)} kWh`;
+          };
+
           if (usageView === "minutely" && minutelyUsage?.minutes?.[dataPointIndex]) {
             const m = minutelyUsage.minutes[dataPointIndex];
             const minuteStartMs = new Date(usageYear, usageMonth - 1, usageDay, usageHour, m.minute, 0).getTime();
@@ -740,8 +747,8 @@ const PowerDashboard: React.FC = () => {
               const summary = getOutageSummaryForRange(minuteStartMs, minuteEndMs);
               if (summary.count > 0 || (m.count > 0 && m.avgVoltage < 10)) {
                 const durStr = summary.totalDurationSec > 0 ? formatOutageDuration(summary.totalDurationSec) : "1m";
-                const pwrStr = val > 0 ? `${val.toFixed(1)} W` : "0 W";
-                return `${pwrStr} (⚡ MATI LISTRIK: ${summary.count || 1}x, Durasi: ${durStr})`;
+                const formattedStr = formatVal(val);
+                return `${formattedStr} (⚡ MATI LISTRIK: ${summary.count || 1}x, Durasi: ${durStr})`;
               }
             }
           }
@@ -753,8 +760,8 @@ const PowerDashboard: React.FC = () => {
               const summary = getOutageSummaryForRange(hourStartMs, hourEndMs);
               if (summary.count > 0 || (h.count > 0 && h.avgVoltage < 10)) {
                 const durStr = summary.totalDurationSec > 0 ? formatOutageDuration(summary.totalDurationSec) : "1m";
-                const kwhStr = `${val.toFixed(3)} kWh`;
-                return `${kwhStr} (⚡ MATI LISTRIK: ${summary.count || 1}x, Durasi: ${durStr})`;
+                const formattedStr = formatVal(val);
+                return `${formattedStr} (⚡ MATI LISTRIK: ${summary.count || 1}x, Durasi: ${durStr})`;
               }
             }
           }
@@ -767,8 +774,8 @@ const PowerDashboard: React.FC = () => {
               const summary = getOutageSummaryForRange(dayStartMs, dayEndMs);
               if (summary.count > 0 || (d.avgVoltage !== undefined && d.avgVoltage > 0 && d.avgVoltage < 10)) {
                 const durStr = summary.totalDurationSec > 0 ? formatOutageDuration(summary.totalDurationSec) : "1m";
-                const kwhStr = `${val.toFixed(3)} kWh`;
-                return `${kwhStr} (⚡ MATI LISTRIK: ${summary.count || 1}x, Durasi: ${durStr})`;
+                const formattedStr = formatVal(val);
+                return `${formattedStr} (⚡ MATI LISTRIK: ${summary.count || 1}x, Durasi: ${durStr})`;
               }
             }
           }
@@ -1369,14 +1376,88 @@ const PowerDashboard: React.FC = () => {
                     <FaArrowLeft size={11} />
                   </button>
 
-                  {/* Label */}
-                  <span className="text-sm font-semibold px-2 min-w-[120px] text-center text-gray-800 dark:text-gray-100">
-                    {usageView === "minutely" ? `${usageDay} ${MONTH_NAMES[usageMonth - 1]}, ${String(usageHour).padStart(2,'0')}:00` :
-                     usageView === "hourly" ? `${usageDay} ${MONTH_NAMES[usageMonth - 1]} ${usageYear}` :
-                     usageView === "daily" ? `${MONTH_NAMES[usageMonth - 1]} ${usageYear}` :
-                     `Tahun ${usageYear}`
-                    }
-                  </span>
+                  {/* Pickers Container */}
+                  <div className="flex items-center gap-1 sm:gap-2 px-1 text-sm font-semibold text-gray-800 dark:text-gray-100">
+                    {usageView === "minutely" && (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="date"
+                          value={`${usageYear}-${String(usageMonth).padStart(2, '0')}-${String(usageDay).padStart(2, '0')}`}
+                          max={new Date().toISOString().split('T')[0]}
+                          onChange={(e) => {
+                            if (!e.target.value) return;
+                            const [y, m, d] = e.target.value.split('-').map(Number);
+                            setUsageYear(y);
+                            setUsageMonth(m);
+                            setUsageDay(d);
+                          }}
+                          className="bg-transparent border-none outline-none text-blue-600 dark:text-blue-400 font-bold cursor-pointer text-xs sm:text-sm focus:ring-0 w-[110px] sm:w-[130px] dark:[color-scheme:dark]"
+                        />
+                        <span className="text-gray-400">·</span>
+                        <select
+                          value={usageHour}
+                          onChange={(e) => setUsageHour(Number(e.target.value))}
+                          className="bg-transparent border-none outline-none text-blue-600 dark:text-blue-400 font-bold cursor-pointer text-xs sm:text-sm focus:ring-0 dark:bg-gray-800"
+                        >
+                          {Array.from({ length: 24 }).map((_, h) => (
+                            <option key={h} value={h} className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100">
+                              {String(h).padStart(2, '0')}:00
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {usageView === "hourly" && (
+                      <input
+                        type="date"
+                        value={`${usageYear}-${String(usageMonth).padStart(2, '0')}-${String(usageDay).padStart(2, '0')}`}
+                        max={new Date().toISOString().split('T')[0]}
+                        onChange={(e) => {
+                          if (!e.target.value) return;
+                          const [y, m, d] = e.target.value.split('-').map(Number);
+                          setUsageYear(y);
+                          setUsageMonth(m);
+                          setUsageDay(d);
+                        }}
+                        className="bg-transparent border-none outline-none text-blue-600 dark:text-blue-400 font-bold cursor-pointer text-xs sm:text-sm focus:ring-0 w-[110px] sm:w-[130px] dark:[color-scheme:dark]"
+                      />
+                    )}
+
+                    {usageView === "daily" && (
+                      <input
+                        type="month"
+                        value={`${usageYear}-${String(usageMonth).padStart(2, '0')}`}
+                        max={new Date().toISOString().slice(0, 7)}
+                        onChange={(e) => {
+                          if (!e.target.value) return;
+                          const [y, m] = e.target.value.split('-').map(Number);
+                          setUsageYear(y);
+                          setUsageMonth(m);
+                        }}
+                        className="bg-transparent border-none outline-none text-blue-600 dark:text-blue-400 font-bold cursor-pointer text-xs sm:text-sm focus:ring-0 w-[100px] sm:w-[125px] dark:[color-scheme:dark]"
+                      />
+                    )}
+
+                    {usageView === "monthly" && (
+                      <div className="flex items-center gap-1">
+                        <select
+                          value={usageYear}
+                          onChange={(e) => setUsageYear(Number(e.target.value))}
+                          className="bg-transparent border-none outline-none text-blue-600 dark:text-blue-400 font-bold cursor-pointer text-xs sm:text-sm focus:ring-0 dark:bg-gray-800"
+                        >
+                          {Array.from({ length: new Date().getFullYear() - 2020 + 1 }).map((_, idx) => {
+                            const y = new Date().getFullYear() - idx;
+                            return (
+                              <option key={y} value={y} className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100">
+                                Tahun {y}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Next button — disabled if future */}
                   <button
