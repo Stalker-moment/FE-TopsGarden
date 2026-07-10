@@ -170,6 +170,23 @@ const PowerDashboard: React.FC = () => {
 
   // WebSocket Reference
   const wsRef = useRef<WebSocket | null>(null);
+  const pendingWsData = useRef<any>(null);
+  const isHoveringChart = useRef(false);
+
+  const applyPendingUpdate = useCallback(() => {
+    if (pendingWsData.current) {
+      const message = pendingWsData.current;
+      pendingWsData.current = null;
+      
+      const current = message.find((d: any) => d.id === selectedDeviceId);
+      if (current?.data) {
+        setRealtimeData({ id: current.id, ...current.data, createdAt: current.lastUpdate || new Date().toISOString() });
+        setStatus("ONLINE");
+        if (current.logs) setRecentLogs(current.logs);
+        if (current.chart) setChartData(current.chart);
+      }
+    }
+  }, [selectedDeviceId]);
 
   useEffect(() => {
     const saved = localStorage.getItem("pzem_max_power");
@@ -235,12 +252,16 @@ const PowerDashboard: React.FC = () => {
       try {
         const message = JSON.parse(event.data);
         if (Array.isArray(message)) {
-          const current = message.find((d: any) => d.id === selectedDeviceId);
-          if (current?.data) {
-            setRealtimeData({ id: current.id, ...current.data, createdAt: current.lastUpdate || new Date().toISOString() });
-            setStatus("ONLINE");
-            if (current.logs) setRecentLogs(current.logs);
-            if (current.chart) setChartData(current.chart);
+          if (isHoveringChart.current) {
+            pendingWsData.current = message;
+          } else {
+            const current = message.find((d: any) => d.id === selectedDeviceId);
+            if (current?.data) {
+              setRealtimeData({ id: current.id, ...current.data, createdAt: current.lastUpdate || new Date().toISOString() });
+              setStatus("ONLINE");
+              if (current.logs) setRecentLogs(current.logs);
+              if (current.chart) setChartData(current.chart);
+            }
           }
         }
       } catch (e) { console.error("WS Parse Error", e); }
@@ -719,7 +740,7 @@ const PowerDashboard: React.FC = () => {
               const summary = getOutageSummaryForRange(minuteStartMs, minuteEndMs);
               if (summary.count > 0 || (m.count > 0 && m.avgVoltage < 10)) {
                 const durStr = summary.totalDurationSec > 0 ? formatOutageDuration(summary.totalDurationSec) : "1m";
-                const pwrStr = m.avgPower > 0 ? `${m.avgPower.toFixed(1)} W` : "0 W";
+                const pwrStr = val > 0 ? `${val.toFixed(1)} W` : "0 W";
                 return `${pwrStr} (⚡ MATI LISTRIK: ${summary.count || 1}x, Durasi: ${durStr})`;
               }
             }
@@ -732,7 +753,7 @@ const PowerDashboard: React.FC = () => {
               const summary = getOutageSummaryForRange(hourStartMs, hourEndMs);
               if (summary.count > 0 || (h.count > 0 && h.avgVoltage < 10)) {
                 const durStr = summary.totalDurationSec > 0 ? formatOutageDuration(summary.totalDurationSec) : "1m";
-                const kwhStr = `${h.usageKwh.toFixed(3)} kWh`;
+                const kwhStr = `${val.toFixed(3)} kWh`;
                 return `${kwhStr} (⚡ MATI LISTRIK: ${summary.count || 1}x, Durasi: ${durStr})`;
               }
             }
@@ -746,7 +767,7 @@ const PowerDashboard: React.FC = () => {
               const summary = getOutageSummaryForRange(dayStartMs, dayEndMs);
               if (summary.count > 0 || (d.avgVoltage !== undefined && d.avgVoltage > 0 && d.avgVoltage < 10)) {
                 const durStr = summary.totalDurationSec > 0 ? formatOutageDuration(summary.totalDurationSec) : "1m";
-                const kwhStr = `${d.usageKwh.toFixed(3)} kWh`;
+                const kwhStr = `${val.toFixed(3)} kWh`;
                 return `${kwhStr} (⚡ MATI LISTRIK: ${summary.count || 1}x, Durasi: ${durStr})`;
               }
             }
@@ -979,7 +1000,11 @@ const PowerDashboard: React.FC = () => {
             </div>
 
             {/* Chart Container */}
-            <div className="flex-1 w-full mt-3 min-h-0 relative">
+            <div 
+              className="flex-1 w-full mt-3 min-h-0 relative"
+              onMouseEnter={() => { isHoveringChart.current = true; }}
+              onMouseLeave={() => { isHoveringChart.current = false; applyPendingUpdate(); }}
+            >
               {fullscreenChart === "usage" ? (
                 <ReactApexChart options={fullscreenUsageOptions} series={usageChartSeries} type="bar" height="100%" />
               ) : (
@@ -1194,7 +1219,11 @@ const PowerDashboard: React.FC = () => {
                 </button>
               </div>
             </div>
-            <div className="h-[200px] -mx-2 md:-mx-4 relative z-10">
+            <div 
+              className="h-[200px] -mx-2 md:-mx-4 relative z-10"
+              onMouseEnter={() => { isHoveringChart.current = true; }}
+              onMouseLeave={() => { isHoveringChart.current = false; applyPendingUpdate(); }}
+            >
               <ReactApexChart options={powerTrendOptions} series={powerTrendSeries} type="area" height="100%" />
             </div>
             <div className="mt-6 space-y-4 relative z-10">
@@ -1488,7 +1517,12 @@ const PowerDashboard: React.FC = () => {
           </div>
 
           {/* Bar Chart */}
-          <div className="relative z-10" style={{ minHeight: 260 }}>
+          <div 
+            className="relative z-10" 
+            style={{ minHeight: 260 }}
+            onMouseEnter={() => { isHoveringChart.current = true; }}
+            onMouseLeave={() => { isHoveringChart.current = false; applyPendingUpdate(); }}
+          >
             {usageLoading && usageChartSeries[0].data.length === 0 ? (
               <div className="h-[260px] flex items-center justify-center text-gray-400 dark:text-gray-600">
                 <div className="flex flex-col items-center gap-3">
