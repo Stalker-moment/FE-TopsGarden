@@ -187,6 +187,7 @@ const PowerDashboard: React.FC = () => {
   const wsRef = useRef<WebSocket | null>(null);
   const pendingWsData = useRef<any>(null);
   const isHoveringChart = useRef(false);
+  const lastHeavyUpdate = useRef(0);
 
   const applyPendingUpdate = useCallback(() => {
     if (pendingWsData.current) {
@@ -199,6 +200,7 @@ const PowerDashboard: React.FC = () => {
         setStatus("ONLINE");
         if (current.logs) setRecentLogs(current.logs);
         if (current.chart) setChartData(current.chart);
+        lastHeavyUpdate.current = Date.now();
       }
     }
   }, [selectedDeviceId]);
@@ -274,8 +276,13 @@ const PowerDashboard: React.FC = () => {
             if (current?.data) {
               setRealtimeData({ id: current.id, ...current.data, createdAt: current.lastUpdate || new Date().toISOString() });
               setStatus("ONLINE");
-              if (current.logs) setRecentLogs(current.logs);
-              if (current.chart) setChartData(current.chart);
+              
+              const now = Date.now();
+              if (now - lastHeavyUpdate.current > 3000) {
+                lastHeavyUpdate.current = now;
+                if (current.logs) setRecentLogs(current.logs);
+                if (current.chart) setChartData(current.chart);
+              }
             }
           }
         }
@@ -836,12 +843,7 @@ const PowerDashboard: React.FC = () => {
       toolbar: { show: false }, 
       background: 'transparent', 
       animations: { 
-        enabled: true,
-        speed: 400,
-        dynamicAnimation: {
-          enabled: true,
-          speed: 300
-        }
+        enabled: false
       } 
     },
     stroke: { curve: 'smooth', width: 2 },
