@@ -1045,9 +1045,7 @@ const PowerDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen text-gray-800 dark:text-gray-100 transition-colors duration-300">
-      {activePicker && (
-        <div className="fixed inset-0 z-[90] bg-transparent" onClick={() => setActivePicker(null)} />
-      )}
+      
       
       {/* Background Decor */}
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
@@ -1278,6 +1276,9 @@ const PowerDashboard: React.FC = () => {
 
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 relative z-30">
+            {activePicker && (
+              <div className="fixed inset-0 z-40 bg-transparent" onClick={() => setActivePicker(null)} />
+            )}
             <div>
               <h3 className="text-xl font-bold flex items-center gap-2">
                 <FaChartBar className="text-blue-500" />
