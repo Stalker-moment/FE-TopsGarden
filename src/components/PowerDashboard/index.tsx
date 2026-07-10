@@ -122,6 +122,21 @@ const PowerDashboard: React.FC = () => {
   const [usageDay, setUsageDay] = useState(new Date().getDate());
   const [usageHour, setUsageHour] = useState(new Date().getHours());
 
+  // Custom Pickers State
+  const [activePicker, setActivePicker] = useState<"date" | "month" | "hour" | "year" | null>(null);
+  const [pickerYear, setPickerYear] = useState(usageYear);
+  const [pickerNavMonth, setPickerNavMonth] = useState(usageMonth);
+  const [pickerNavYear, setPickerNavYear] = useState(usageYear);
+
+  useEffect(() => {
+    setPickerYear(usageYear);
+    setPickerNavYear(usageYear);
+  }, [usageYear]);
+
+  useEffect(() => {
+    setPickerNavMonth(usageMonth);
+  }, [usageMonth]);
+
   const [minutelyUsage, setMinutelyUsage] = useState<PzemMinutelyUsageResponse | null>(null);
   const [hourlyUsage, setHourlyUsage] = useState<PzemHourlyUsageResponse | null>(null);
   const [dailyUsage, setDailyUsage] = useState<PzemDailyUsageResponse | null>(null);
@@ -1028,6 +1043,9 @@ const PowerDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen text-gray-800 dark:text-gray-100 transition-colors duration-300">
+      {activePicker && (
+        <div className="fixed inset-0 z-[90] bg-transparent" onClick={() => setActivePicker(null)} />
+      )}
       
       {/* Background Decor */}
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
@@ -1379,82 +1397,327 @@ const PowerDashboard: React.FC = () => {
                   {/* Pickers Container */}
                   <div className="flex items-center gap-1 sm:gap-2 px-1 text-sm font-semibold text-gray-800 dark:text-gray-100">
                     {usageView === "minutely" && (
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="date"
-                          value={`${usageYear}-${String(usageMonth).padStart(2, '0')}-${String(usageDay).padStart(2, '0')}`}
-                          max={new Date().toISOString().split('T')[0]}
-                          onChange={(e) => {
-                            if (!e.target.value) return;
-                            const [y, m, d] = e.target.value.split('-').map(Number);
-                            setUsageYear(y);
-                            setUsageMonth(m);
-                            setUsageDay(d);
-                          }}
-                          className="bg-transparent border-none outline-none text-blue-600 dark:text-blue-400 font-bold cursor-pointer text-xs sm:text-sm focus:ring-0 w-[110px] sm:w-[130px] dark:[color-scheme:dark]"
-                        />
+                      <div className="flex items-center gap-1.5">
+                        {/* Date Picker Button */}
+                        <div className="relative">
+                          <button
+                            onClick={() => {
+                              setPickerNavMonth(usageMonth);
+                              setPickerNavYear(usageYear);
+                              setActivePicker(p => p === "date" ? null : "date");
+                            }}
+                            className="bg-transparent border border-blue-200/50 dark:border-blue-900/50 hover:border-blue-500/80 dark:hover:border-blue-500/80 px-2.5 py-1.5 rounded-lg text-blue-600 dark:text-blue-400 font-bold cursor-pointer text-xs sm:text-sm shadow-sm transition-all flex items-center gap-1.5"
+                          >
+                            <span>{usageDay} {MONTH_NAMES[usageMonth - 1]} {usageYear}</span>
+                            <span className="text-[10px] opacity-70">▼</span>
+                          </button>
+                          
+                          {activePicker === "date" && (
+                            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 z-[100] w-[280px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 shadow-xl">
+                              {/* Header */}
+                              <div className="flex items-center justify-between mb-3 border-b border-gray-100 dark:border-gray-700 pb-2">
+                                <button
+                                  onClick={() => {
+                                    if (pickerNavMonth === 1) {
+                                      setPickerNavMonth(12);
+                                      setPickerNavYear(y => y - 1);
+                                    } else {
+                                      setPickerNavMonth(m => m - 1);
+                                    }
+                                  }}
+                                  className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-500"
+                                >
+                                  <FaArrowLeft size={10} />
+                                </button>
+                                <span className="font-extrabold text-xs sm:text-sm text-gray-800 dark:text-gray-100 whitespace-nowrap">
+                                  {MONTH_NAMES[pickerNavMonth - 1]} {pickerNavYear}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    if (pickerNavMonth === 12) {
+                                      setPickerNavMonth(1);
+                                      setPickerNavYear(y => y + 1);
+                                    } else {
+                                      setPickerNavMonth(m => m + 1);
+                                    }
+                                  }}
+                                  className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-500"
+                                >
+                                  <FaArrowRight size={10} />
+                                </button>
+                              </div>
+
+                              {/* Weekdays */}
+                              <div className="grid grid-cols-7 gap-1 text-center mb-1">
+                                {["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"].map(name => (
+                                  <span key={name} className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase">
+                                    {name}
+                                  </span>
+                                ))}
+                              </div>
+
+                              {/* Calendar Days */}
+                              <div className="grid grid-cols-7 gap-1 text-center">
+                                {Array.from({ length: new Date(pickerNavYear, pickerNavMonth - 1, 1).getDay() }).map((_, idx) => (
+                                  <div key={`empty-${idx}`} />
+                                ))}
+                                {Array.from({ length: new Date(pickerNavYear, pickerNavMonth, 0).getDate() }).map((_, idx) => {
+                                  const dNum = idx + 1;
+                                  const isSelected = dNum === usageDay && pickerNavMonth === usageMonth && pickerNavYear === usageYear;
+                                  const isFuture = new Date(pickerNavYear, pickerNavMonth - 1, dNum) > new Date();
+                                  return (
+                                    <button
+                                      key={`day-${dNum}`}
+                                      disabled={isFuture}
+                                      onClick={() => {
+                                        setUsageYear(pickerNavYear);
+                                        setUsageMonth(pickerNavMonth);
+                                        setUsageDay(dNum);
+                                        setActivePicker(null);
+                                      }}
+                                      className={`py-1.5 text-xs font-bold rounded-lg transition-all ${
+                                        isSelected
+                                          ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                                          : isFuture
+                                          ? "opacity-20 cursor-not-allowed text-gray-400"
+                                          : "hover:bg-gray-100 dark:hover:bg-gray-700/60 text-gray-700 dark:text-gray-300"
+                                      }`}
+                                    >
+                                      {dNum}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
                         <span className="text-gray-400">·</span>
-                        <select
-                          value={usageHour}
-                          onChange={(e) => setUsageHour(Number(e.target.value))}
-                          className="bg-transparent border-none outline-none text-blue-600 dark:text-blue-400 font-bold cursor-pointer text-xs sm:text-sm focus:ring-0 dark:bg-gray-800"
-                        >
-                          {Array.from({ length: 24 }).map((_, h) => (
-                            <option key={h} value={h} className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100">
-                              {String(h).padStart(2, '0')}:00
-                            </option>
-                          ))}
-                        </select>
+
+                        {/* Hour Picker Button */}
+                        <div className="relative">
+                          <button
+                            onClick={() => setActivePicker(p => p === "hour" ? null : "hour")}
+                            className="bg-transparent border border-blue-200/50 dark:border-blue-900/50 hover:border-blue-500/80 dark:hover:border-blue-500/80 px-2.5 py-1.5 rounded-lg text-blue-600 dark:text-blue-400 font-bold cursor-pointer text-xs sm:text-sm shadow-sm transition-all flex items-center gap-1.5"
+                          >
+                            <span>{String(usageHour).padStart(2, '0')}:00</span>
+                            <span className="text-[10px] opacity-70">▼</span>
+                          </button>
+
+                          {activePicker === "hour" && (
+                            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 z-[100] w-32 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-2 shadow-xl max-h-48 overflow-y-auto no-scrollbar">
+                              <div className="flex flex-col gap-0.5">
+                                {Array.from({ length: 24 }).map((_, h) => {
+                                  const isSelected = h === usageHour;
+                                  return (
+                                    <button
+                                      key={h}
+                                      onClick={() => {
+                                        setUsageHour(h);
+                                        setActivePicker(null);
+                                      }}
+                                      className={`py-1.5 text-xs font-bold rounded-lg transition-all ${
+                                        isSelected
+                                          ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                                          : "hover:bg-gray-100 dark:hover:bg-gray-700/60 text-gray-700 dark:text-gray-300"
+                                      }`}
+                                    >
+                                      {String(h).padStart(2, '0')}:00
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
 
                     {usageView === "hourly" && (
-                      <input
-                        type="date"
-                        value={`${usageYear}-${String(usageMonth).padStart(2, '0')}-${String(usageDay).padStart(2, '0')}`}
-                        max={new Date().toISOString().split('T')[0]}
-                        onChange={(e) => {
-                          if (!e.target.value) return;
-                          const [y, m, d] = e.target.value.split('-').map(Number);
-                          setUsageYear(y);
-                          setUsageMonth(m);
-                          setUsageDay(d);
-                        }}
-                        className="bg-transparent border-none outline-none text-blue-600 dark:text-blue-400 font-bold cursor-pointer text-xs sm:text-sm focus:ring-0 w-[110px] sm:w-[130px] dark:[color-scheme:dark]"
-                      />
+                      <div className="relative">
+                        <button
+                          onClick={() => {
+                            setPickerNavMonth(usageMonth);
+                            setPickerNavYear(usageYear);
+                            setActivePicker(p => p === "date" ? null : "date");
+                          }}
+                          className="bg-transparent border border-blue-200/50 dark:border-blue-900/50 hover:border-blue-500/80 dark:hover:border-blue-500/80 px-2.5 py-1.5 rounded-lg text-blue-600 dark:text-blue-400 font-bold cursor-pointer text-xs sm:text-sm shadow-sm transition-all flex items-center gap-1.5"
+                        >
+                          <span>{usageDay} {MONTH_NAMES[usageMonth - 1]} {usageYear}</span>
+                          <span className="text-[10px] opacity-70">▼</span>
+                        </button>
+                        
+                        {activePicker === "date" && (
+                          <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 z-[100] w-[280px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 shadow-xl">
+                            {/* Header */}
+                            <div className="flex items-center justify-between mb-3 border-b border-gray-100 dark:border-gray-700 pb-2">
+                              <button
+                                onClick={() => {
+                                  if (pickerNavMonth === 1) {
+                                    setPickerNavMonth(12);
+                                    setPickerNavYear(y => y - 1);
+                                  } else {
+                                    setPickerNavMonth(m => m - 1);
+                                  }
+                                }}
+                                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-500"
+                              >
+                                <FaArrowLeft size={10} />
+                              </button>
+                              <span className="font-extrabold text-xs sm:text-sm text-gray-800 dark:text-gray-100 whitespace-nowrap">
+                                {MONTH_NAMES[pickerNavMonth - 1]} {pickerNavYear}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  if (pickerNavMonth === 12) {
+                                    setPickerNavMonth(1);
+                                    setPickerNavYear(y => y + 1);
+                                  } else {
+                                    setPickerNavMonth(m => m + 1);
+                                  }
+                                }}
+                                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-500"
+                              >
+                                <FaArrowRight size={10} />
+                              </button>
+                            </div>
+
+                            {/* Weekdays */}
+                            <div className="grid grid-cols-7 gap-1 text-center mb-1">
+                              {["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"].map(name => (
+                                <span key={name} className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase">
+                                  {name}
+                                </span>
+                              ))}
+                            </div>
+
+                            {/* Calendar Days */}
+                            <div className="grid grid-cols-7 gap-1 text-center">
+                              {Array.from({ length: new Date(pickerNavYear, pickerNavMonth - 1, 1).getDay() }).map((_, idx) => (
+                                <div key={`empty-${idx}`} />
+                              ))}
+                              {Array.from({ length: new Date(pickerNavYear, pickerNavMonth, 0).getDate() }).map((_, idx) => {
+                                const dNum = idx + 1;
+                                const isSelected = dNum === usageDay && pickerNavMonth === usageMonth && pickerNavYear === usageYear;
+                                const isFuture = new Date(pickerNavYear, pickerNavMonth - 1, dNum) > new Date();
+                                return (
+                                  <button
+                                    key={`day-${dNum}`}
+                                    disabled={isFuture}
+                                    onClick={() => {
+                                      setUsageYear(pickerNavYear);
+                                      setUsageMonth(pickerNavMonth);
+                                      setUsageDay(dNum);
+                                      setActivePicker(null);
+                                    }}
+                                    className={`py-1.5 text-xs font-bold rounded-lg transition-all ${
+                                      isSelected
+                                        ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                                        : isFuture
+                                        ? "opacity-20 cursor-not-allowed text-gray-400"
+                                        : "hover:bg-gray-100 dark:hover:bg-gray-700/60 text-gray-700 dark:text-gray-300"
+                                    }`}
+                                  >
+                                    {dNum}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     )}
 
                     {usageView === "daily" && (
-                      <input
-                        type="month"
-                        value={`${usageYear}-${String(usageMonth).padStart(2, '0')}`}
-                        max={new Date().toISOString().slice(0, 7)}
-                        onChange={(e) => {
-                          if (!e.target.value) return;
-                          const [y, m] = e.target.value.split('-').map(Number);
-                          setUsageYear(y);
-                          setUsageMonth(m);
-                        }}
-                        className="bg-transparent border-none outline-none text-blue-600 dark:text-blue-400 font-bold cursor-pointer text-xs sm:text-sm focus:ring-0 w-[100px] sm:w-[125px] dark:[color-scheme:dark]"
-                      />
+                      <div className="relative">
+                        <button
+                          onClick={() => {
+                            setPickerYear(usageYear);
+                            setActivePicker(p => p === "month" ? null : "month");
+                          }}
+                          className="bg-transparent border border-blue-200/50 dark:border-blue-900/50 hover:border-blue-500/80 dark:hover:border-blue-500/80 px-2.5 py-1.5 rounded-lg text-blue-600 dark:text-blue-400 font-bold cursor-pointer text-xs sm:text-sm shadow-sm transition-all flex items-center gap-1.5"
+                        >
+                          <span>{MONTH_NAMES[usageMonth - 1]} {usageYear}</span>
+                          <span className="text-[10px] opacity-70">▼</span>
+                        </button>
+                        
+                        {activePicker === "month" && (
+                          <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 z-[100] w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 shadow-xl">
+                            {/* Header */}
+                            <div className="flex items-center justify-between mb-3 border-b border-gray-100 dark:border-gray-700 pb-2">
+                              <button onClick={() => setPickerYear(y => y - 1)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-500">
+                                <FaArrowLeft size={10} />
+                              </button>
+                              <span className="font-bold text-sm text-gray-800 dark:text-gray-100">{pickerYear}</span>
+                              <button onClick={() => setPickerYear(y => y + 1)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-500">
+                                <FaArrowRight size={10} />
+                              </button>
+                            </div>
+                            {/* Grid */}
+                            <div className="grid grid-cols-3 gap-2">
+                              {MONTH_NAMES.map((mName, idx) => {
+                                const mNum = idx + 1;
+                                const isSelected = pickerYear === usageYear && mNum === usageMonth;
+                                return (
+                                  <button
+                                    key={mName}
+                                    onClick={() => {
+                                      setUsageYear(pickerYear);
+                                      setUsageMonth(mNum);
+                                      setActivePicker(null);
+                                    }}
+                                    className={`py-2 text-xs font-bold rounded-xl transition-all ${
+                                      isSelected
+                                        ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                                        : "hover:bg-gray-100 dark:hover:bg-gray-700/60 text-gray-700 dark:text-gray-300"
+                                    }`}
+                                  >
+                                    {mName.slice(0, 3)}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     )}
 
                     {usageView === "monthly" && (
-                      <div className="flex items-center gap-1">
-                        <select
-                          value={usageYear}
-                          onChange={(e) => setUsageYear(Number(e.target.value))}
-                          className="bg-transparent border-none outline-none text-blue-600 dark:text-blue-400 font-bold cursor-pointer text-xs sm:text-sm focus:ring-0 dark:bg-gray-800"
+                      <div className="relative">
+                        <button
+                          onClick={() => setActivePicker(p => p === "year" ? null : "year")}
+                          className="bg-transparent border border-blue-200/50 dark:border-blue-900/50 hover:border-blue-500/80 dark:hover:border-blue-500/80 px-2.5 py-1.5 rounded-lg text-blue-600 dark:text-blue-400 font-bold cursor-pointer text-xs sm:text-sm shadow-sm transition-all flex items-center gap-1.5"
                         >
-                          {Array.from({ length: new Date().getFullYear() - 2020 + 1 }).map((_, idx) => {
-                            const y = new Date().getFullYear() - idx;
-                            return (
-                              <option key={y} value={y} className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100">
-                                Tahun {y}
-                              </option>
-                            );
-                          })}
-                        </select>
+                          <span>Tahun {usageYear}</span>
+                          <span className="text-[10px] opacity-70">▼</span>
+                        </button>
+                        
+                        {activePicker === "year" && (
+                          <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 z-[100] w-32 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-2 shadow-xl">
+                            <div className="flex flex-col gap-0.5">
+                              {Array.from({ length: new Date().getFullYear() - 2020 + 1 }).map((_, idx) => {
+                                const y = new Date().getFullYear() - idx;
+                                const isSelected = y === usageYear;
+                                return (
+                                  <button
+                                    key={y}
+                                    onClick={() => {
+                                      setUsageYear(y);
+                                      setActivePicker(null);
+                                    }}
+                                    className={`py-1.5 text-xs font-bold rounded-lg transition-all ${
+                                      isSelected
+                                        ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                                        : "hover:bg-gray-100 dark:hover:bg-gray-700/60 text-gray-700 dark:text-gray-300"
+                                    }`}
+                                  >
+                                    Tahun {y}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
