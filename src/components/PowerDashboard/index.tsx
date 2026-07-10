@@ -1277,7 +1277,7 @@ const PowerDashboard: React.FC = () => {
           <div className="absolute -bottom-8 -right-8 w-48 h-48 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none" />
 
           {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 relative z-10">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 relative z-30">
             <div>
               <h3 className="text-xl font-bold flex items-center gap-2">
                 <FaChartBar className="text-blue-500" />
@@ -1660,9 +1660,11 @@ const PowerDashboard: React.FC = () => {
                               {MONTH_NAMES.map((mName, idx) => {
                                 const mNum = idx + 1;
                                 const isSelected = pickerYear === usageYear && mNum === usageMonth;
+                                const isFutureMonth = pickerYear > new Date().getFullYear() || (pickerYear === new Date().getFullYear() && mNum > (new Date().getMonth() + 1));
                                 return (
                                   <button
                                     key={mName}
+                                    disabled={isFutureMonth}
                                     onClick={() => {
                                       setUsageYear(pickerYear);
                                       setUsageMonth(mNum);
@@ -1671,6 +1673,8 @@ const PowerDashboard: React.FC = () => {
                                     className={`py-2 text-xs font-bold rounded-xl transition-all ${
                                       isSelected
                                         ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                                        : isFutureMonth
+                                        ? "opacity-20 cursor-not-allowed text-gray-400"
                                         : "hover:bg-gray-100 dark:hover:bg-gray-700/60 text-gray-700 dark:text-gray-300"
                                     }`}
                                   >
