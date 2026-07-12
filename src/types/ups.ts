@@ -1,8 +1,19 @@
+export interface UpsConfig {
+  sensors: {
+    cells: boolean;
+    voltageIn: boolean;
+    ina12v: boolean;
+    ina5v: boolean;
+    temperatures: { id: string; label: string }[];
+  };
+}
+
 export interface UpsDevice {
   id: string;
   name: string;
   location: string | null;
   isActive: boolean;
+  config: UpsConfig;
   createdAt: string;
   updatedAt: string;
 }

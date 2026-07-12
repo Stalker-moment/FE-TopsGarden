@@ -20,19 +20,18 @@ import {
   Server,
   Laptop,
   BatteryCharging,
-  Wifi,
-  WifiOff,
-  Thermometer as ThermIcon,
-  MemoryStick
+  Settings,
+  Trash2,
+  Plus,
+  X
 } from 'lucide-react';
 import { ServerBatteryInfo } from '@/types/pzem';
-import { UpsDevice, UpsLog } from '@/types/ups';
+import { UpsDevice, UpsLog, UpsConfig } from '@/types/ups';
 import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 
 const ReactApexChart = dynamic(() => import('react-apexcharts'), { ssr: false });
 
-// Premium Chart Configs with glowing drop shadow
 const CHART_OPTIONS: any = {
   chart: {
     type: 'area',
@@ -93,6 +92,20 @@ const HTTPS_API_URL = process.env.NEXT_PUBLIC_HTTPS_API_URL || "localhost:3001";
 const API_URL = HTTPS_API_URL.includes("localhost") ? `http://${HTTPS_API_URL}` : `https://${HTTPS_API_URL}`;
 const WS_URL = HTTPS_API_URL.includes("localhost") ? `ws://${HTTPS_API_URL}/ups` : `wss://${HTTPS_API_URL}/ups`;
 
+const DEFAULT_CONFIG: UpsConfig = {
+  sensors: {
+    cells: true,
+    voltageIn: true,
+    ina12v: true,
+    ina5v: true,
+    temperatures: [
+      { id: "system", label: "System Temp (DS18B20)" },
+      { id: "mosfet", label: "BMS MOSFET Thermal" },
+      { id: "ambient", label: "DHT22 Ambient Temp" }
+    ]
+  }
+};
+
 const UPSDashboard: React.FC = () => {
   const [uptime, setUptime] = useState('02:14:55:12');
   const [hasMounted, setHasMounted] = useState(false);
@@ -107,6 +120,19 @@ const UPSDashboard: React.FC = () => {
   const [recentLogs, setRecentLogs] = useState<UpsLog[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
 
+  // Settings Modal state
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsName, setSettingsName] = useState('');
+  const [settingsLocation, setSettingsLocation] = useState('');
+  const [settingsCells, setSettingsCells] = useState(true);
+  const [settingsVoltageIn, setSettingsVoltageIn] = useState(true);
+  const [settingsIna12v, setSettingsIna12v] = useState(true);
+  const [settingsIna5v, setSettingsIna5v] = useState(true);
+  const [settingsTemps, setSettingsTemps] = useState<{ id: string; label: string }[]>([]);
+  const [newTempId, setNewTempId] = useState('');
+  const [newTempLabel, setNewTempLabel] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const fetchServerBattery = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/api/device/server-battery`);
@@ -114,13 +140,13 @@ const UPSDashboard: React.FC = () => {
     } catch { /* silent */ }
   }, []);
 
-  const fetchDevices = useCallback(async () => {
+  const fetchDevices = useCallback(async (selectFirst = false) => {
     try {
       const res = await fetch(`${API_URL}/api/device/ups`);
       if (res.ok) {
         const data: UpsDevice[] = await res.json();
         setDevices(data);
-        if (data.length > 0 && !selectedDeviceId) {
+        if (data.length > 0 && (selectFirst || !selectedDeviceId)) {
           setSelectedDeviceId(data[0].id);
         }
       }
@@ -223,6 +249,82 @@ const UPSDashboard: React.FC = () => {
     };
   }, [fetchServerBattery, fetchDevices]);
 
+  // Load initial settings when modal opens
+  const openSettings = () => {
+    const activeDevice = devices.find(d => d.id === selectedDeviceId);
+    if (!activeDevice) return;
+
+    setSettingsName(activeDevice.name);
+    setSettingsLocation(activeDevice.location || '');
+    
+    const config: UpsConfig = activeDevice.config || DEFAULT_CONFIG;
+    setSettingsCells(config.sensors?.cells !== false);
+    setSettingsVoltageIn(config.sensors?.voltageIn !== false);
+    setSettingsIna12v(config.sensors?.ina12v !== false);
+    setSettingsIna5v(config.sensors?.ina5v !== false);
+    setSettingsTemps(config.sensors?.temperatures || []);
+    setNewTempId('');
+    setNewTempLabel('');
+
+    setIsSettingsOpen(true);
+  };
+
+  const saveSettings = async () => {
+    if (!selectedDeviceId) return;
+    setIsSubmitting(true);
+    try {
+      const updatedConfig: UpsConfig = {
+        sensors: {
+          cells: settingsCells,
+          voltageIn: settingsVoltageIn,
+          ina12v: settingsIna12v,
+          ina5v: settingsIna5v,
+          temperatures: settingsTemps
+        }
+      };
+
+      const res = await fetch(`${API_URL}/api/device/ups/${selectedDeviceId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: settingsName,
+          location: settingsLocation,
+          config: updatedConfig
+        })
+      });
+
+      if (res.ok) {
+        await fetchDevices(false);
+        setIsSettingsOpen(false);
+      } else {
+        alert("Failed to save settings: " + await res.text());
+      }
+    } catch (e: any) {
+      alert("Error saving settings: " + e.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const addTempSensorSetting = () => {
+    if (!newTempId || !newTempLabel) return;
+    if (settingsTemps.some(t => t.id === newTempId)) {
+      alert("Sensor ID already exists!");
+      return;
+    }
+    setSettingsTemps([...settingsTemps, { id: newTempId.toLowerCase().trim(), label: newTempLabel.trim() }]);
+    setNewTempId('');
+    setNewTempLabel('');
+  };
+
+  const removeTempSensorSetting = (id: string) => {
+    setSettingsTemps(settingsTemps.filter(t => t.id !== id));
+  };
+
+  // Active config parsing
+  const activeDevice = devices.find(d => d.id === selectedDeviceId);
+  const activeConfig: UpsConfig = activeDevice?.config || DEFAULT_CONFIG;
+
   // Server Battery details
   const batteryPercent = serverBattery?.percent ?? 0;
   const batteryColor = batteryPercent >= 50 ? '#06b6d4' : batteryPercent >= 20 ? '#fbbf24' : '#ef4444';
@@ -241,23 +343,28 @@ const UPSDashboard: React.FC = () => {
 
   // Dynamic Telemetry Mappings
   const totalVoltageVal = realtimeData?.totalVoltage !== undefined ? Number(realtimeData.totalVoltage).toFixed(2) : '11.45';
-  const loadCurrentVal = realtimeData ? Math.round((realtimeData.current12v || 0) + (realtimeData.current5v || 0)).toString() : '450';
-  const powerVal = realtimeData 
-    ? ((realtimeData.voltage12v * (realtimeData.current12v / 1000)) + (realtimeData.voltage5v * (realtimeData.current5v / 1000))).toFixed(2)
-    : '5.15';
+  
+  // Calculate Load Current only from active INA sensors
+  const c12 = activeConfig.sensors?.ina12v !== false ? (realtimeData?.current12v || 0) : 0;
+  const c5 = activeConfig.sensors?.ina5v !== false ? (realtimeData?.current5v || 0) : 0;
+  const loadCurrentVal = realtimeData ? Math.round(c12 + c5).toString() : '450';
+  
+  // Calculate power consumption only from active INA sensors
+  const p12 = activeConfig.sensors?.ina12v !== false ? ((realtimeData?.voltage12v || 0) * (c12 / 1000)) : 0;
+  const p5 = activeConfig.sensors?.ina5v !== false ? ((realtimeData?.voltage5v || 0) * (c5 / 1000)) : 0;
+  const powerVal = realtimeData ? (p12 + p5).toFixed(2) : '5.15';
 
   const dynamicMetrics = [
-    { id: 1, title: 'Total Battery Voltage', value: totalVoltageVal, unit: 'V', icon: Battery, color: 'text-cyan-400', glow: 'shadow-cyan-500/10 hover:shadow-cyan-500/20', desc: 'Sensing: Cumulative 3S Pack' },
-    { id: 2, title: 'Combined Load Current', value: loadCurrentVal, unit: 'mA', icon: Activity, color: 'text-emerald-400', glow: 'shadow-emerald-500/10 hover:shadow-emerald-500/20', desc: 'Dual Bus: INA219 (12V + 5V)' },
-    { id: 3, title: 'Total Power Output', value: powerVal, unit: 'W', icon: Zap, color: 'text-amber-400', glow: 'shadow-amber-500/10 hover:shadow-amber-500/20', desc: 'Realtime Power Consumption' },
+    ...(activeConfig.sensors?.cells !== false ? [{ id: 1, title: 'Total Battery Voltage', value: totalVoltageVal, unit: 'V', icon: Battery, color: 'text-cyan-400', glow: 'shadow-cyan-500/10 hover:shadow-cyan-500/20', desc: 'Sensing: Cumulative 3S Pack' }] : []),
+    ...((activeConfig.sensors?.ina12v !== false || activeConfig.sensors?.ina5v !== false) ? [
+      { id: 2, title: 'Combined Load Current', value: loadCurrentVal, unit: 'mA', icon: Activity, color: 'text-emerald-400', glow: 'shadow-emerald-500/10 hover:shadow-emerald-500/20', desc: `INA219 Active: ${[activeConfig.sensors?.ina12v !== false && '12V', activeConfig.sensors?.ina5v !== false && '5V'].filter(Boolean).join(' + ')}` },
+      { id: 3, title: 'Total Power Output', value: powerVal, unit: 'W', icon: Zap, color: 'text-amber-400', glow: 'shadow-amber-500/10 hover:shadow-amber-500/20', desc: 'Realtime Power Consumption' }
+    ] : [])
   ];
 
   // Temperature readings
   const temps = realtimeData?.temperatures || {};
   const systemTemp = temps.system !== undefined ? Number(temps.system) : 32.5;
-  const cell1Temp = temps.cell1 !== undefined ? Number(temps.cell1).toFixed(1) : (temps.system !== undefined ? (Number(temps.system) + 1.2).toFixed(1) : '32.5');
-  const cell2Temp = temps.cell2 !== undefined ? Number(temps.cell2).toFixed(1) : (temps.system !== undefined ? (Number(temps.system) + 5.7).toFixed(1) : '38.2');
-  const cell3Temp = temps.cell3 !== undefined ? Number(temps.cell3).toFixed(1) : (temps.system !== undefined ? (Number(temps.system) + 0.5).toFixed(1) : '31.8');
   
   const cell1Val = realtimeData?.cell1Voltage !== undefined ? Number(realtimeData.cell1Voltage).toFixed(2) : '4.12';
   const cell2Val = realtimeData?.cell2Voltage !== undefined ? Number(realtimeData.cell2Voltage).toFixed(2) : '3.85';
@@ -276,10 +383,11 @@ const UPSDashboard: React.FC = () => {
     return Math.round(((v - 3.0) / 1.2) * 100);
   };
 
+  // Cells visual mappings with fallbacks
   const cells = [
-    { id: 1, name: 'Cell 1 (3.0 - 4.2V)', voltage: cell1Val, temp: cell1Temp, health: getCellHealth(cell1Val), status: getCellStatus(cell1Val) },
-    { id: 2, name: 'Cell 2 (3.0 - 4.2V)', voltage: cell2Val, temp: cell2Temp, health: getCellHealth(cell2Val), status: getCellStatus(cell2Val) },
-    { id: 3, name: 'Cell 3 (3.0 - 4.2V)', voltage: cell3Val, temp: cell3Temp, health: getCellHealth(cell3Val), status: getCellStatus(cell3Val) },
+    { id: 1, name: 'Cell 1 (3.0 - 4.2V)', voltage: cell1Val, temp: temps.cell1 !== undefined ? Number(temps.cell1).toFixed(1) : (systemTemp + 1.2).toFixed(1), health: getCellHealth(cell1Val), status: getCellStatus(cell1Val) },
+    { id: 2, name: 'Cell 2 (3.0 - 4.2V)', voltage: cell2Val, temp: temps.cell2 !== undefined ? Number(temps.cell2).toFixed(1) : (systemTemp + 5.7).toFixed(1), health: getCellHealth(cell2Val), status: getCellStatus(cell2Val) },
+    { id: 3, name: 'Cell 3 (3.0 - 4.2V)', voltage: cell3Val, temp: temps.cell3 !== undefined ? Number(temps.cell3).toFixed(1) : (systemTemp + 0.5).toFixed(1), health: getCellHealth(cell3Val), status: getCellStatus(cell3Val) },
   ];
 
   // Dynamic Chart Options mapping
@@ -310,7 +418,7 @@ const UPSDashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0f19] text-slate-200 p-4 md:p-6 lg:p-8 font-sans transition-colors duration-300">
+    <div className="min-h-screen bg-[#0b0f19] text-slate-200 p-4 md:p-6 lg:p-8 font-sans transition-colors duration-300 relative">
       
       {/* Header Section */}
       <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8 p-6 bg-slate-900/25 border border-slate-800/40 rounded-3xl backdrop-blur-xl">
@@ -347,21 +455,32 @@ const UPSDashboard: React.FC = () => {
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full lg:w-auto">
-          {/* Custom Dropdown Device Selector */}
+          {/* Custom Dropdown Device Selector & Settings Gear */}
           {devices.length > 0 && (
-            <div className="flex items-center gap-3 bg-slate-900/60 border border-slate-800/80 rounded-2xl px-4 py-2 w-full sm:w-auto">
-              <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest whitespace-nowrap">Hardware:</span>
-              <select
-                value={selectedDeviceId || ''}
-                onChange={(e) => setSelectedDeviceId(e.target.value)}
-                className="bg-transparent border-none text-xs font-bold text-white focus:outline-none cursor-pointer text-ellipsis overflow-hidden w-full sm:w-[150px] md:w-[200px]"
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="flex flex-1 sm:flex-none items-center gap-3 bg-slate-900/60 border border-slate-800/80 rounded-2xl px-4 py-2 w-full">
+                <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest whitespace-nowrap">Hardware:</span>
+                <select
+                  value={selectedDeviceId || ''}
+                  onChange={(e) => setSelectedDeviceId(e.target.value)}
+                  className="bg-transparent border-none text-xs font-bold text-white focus:outline-none cursor-pointer text-ellipsis overflow-hidden w-full sm:w-[150px] md:w-[200px]"
+                >
+                  {devices.map((d) => (
+                    <option key={d.id} value={d.id} className="bg-[#0b0f19] text-white">
+                      {d.name} {d.location ? `(${d.location})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Settings Trigger Icon */}
+              <button 
+                onClick={openSettings}
+                className="p-2.5 bg-slate-900/60 border border-slate-800/85 hover:border-cyan-500/50 hover:bg-cyan-500/10 rounded-2xl text-slate-400 hover:text-cyan-400 transition-all duration-200 active:scale-95 shadow-md shadow-slate-950/20"
+                title="Configure UPS Sensors"
               >
-                {devices.map((d) => (
-                  <option key={d.id} value={d.id} className="bg-[#0b0f19] text-white">
-                    {d.name} {d.location ? `(${d.location})` : ''}
-                  </option>
-                ))}
-              </select>
+                <Settings size={18} />
+              </button>
             </div>
           )}
 
@@ -406,7 +525,7 @@ const UPSDashboard: React.FC = () => {
         {/* Left Column (col-span-4): Big Metrics & Safety */}
         <div className="lg:col-span-4 flex flex-col gap-6">
           
-          {/* Main metrics */}
+          {/* Main metrics (Adaptively filtered) */}
           {dynamicMetrics.map((metric) => (
             <motion.div 
               key={metric.id}
@@ -442,7 +561,7 @@ const UPSDashboard: React.FC = () => {
                 Safety Control Room
              </h3>
              <div className="space-y-3 relative z-10">
-                {/* MQ2 Sensor */}
+                {/* MQ2 Sensor (Always Active for hazard warning) */}
                 <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-950/40 border border-slate-800/50">
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400"><Flame size={16} /></div>
@@ -454,33 +573,35 @@ const UPSDashboard: React.FC = () => {
                   <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-0.5 rounded-full">CLEAR</span>
                 </div>
 
-                {/* PLN Outage Sensor */}
-                <div className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all duration-500 ${
-                  isPlnConnected 
-                    ? 'bg-slate-950/40 border-slate-800/50' 
-                    : 'bg-rose-500/10 border-rose-500/25 shadow-lg shadow-rose-500/5'
-                }`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-xl ${isPlnConnected ? 'bg-cyan-500/10 text-cyan-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                      <Zap size={16} className={isPlnConnected ? '' : 'animate-pulse'} />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-slate-300 block">
-                        Grid Adapter Input
-                      </span>
-                      <span className="text-[9px] text-slate-500 uppercase font-mono">
-                        PLN Status {realtimeData?.voltageIn !== undefined && `(${Number(realtimeData.voltageIn).toFixed(1)}V)`}
-                      </span>
-                    </div>
-                  </div>
-                  <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full border ${
+                {/* PLN Outage Sensor (Adaptively shown if voltageIn is enabled) */}
+                {activeConfig.sensors?.voltageIn !== false && (
+                  <div className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all duration-500 ${
                     isPlnConnected 
-                      ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/25'
-                      : 'bg-rose-500/20 text-rose-400 border-rose-500/30 animate-pulse'
+                      ? 'bg-slate-950/40 border-slate-800/50' 
+                      : 'bg-rose-500/10 border-rose-500/25 shadow-lg shadow-rose-500/5'
                   }`}>
-                    {isPlnConnected ? 'CONNECTED' : 'OFFLINE!'}
-                  </span>
-                </div>
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-xl ${isPlnConnected ? 'bg-cyan-500/10 text-cyan-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                        <Zap size={16} className={isPlnConnected ? '' : 'animate-pulse'} />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-300 block">
+                          Grid Adapter Input
+                        </span>
+                        <span className="text-[9px] text-slate-500 uppercase font-mono">
+                          PLN Status {realtimeData?.voltageIn !== undefined && `(${Number(realtimeData.voltageIn).toFixed(1)}V)`}
+                        </span>
+                      </div>
+                    </div>
+                    <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full border ${
+                      isPlnConnected 
+                        ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/25'
+                        : 'bg-rose-500/20 text-rose-400 border-rose-500/30 animate-pulse'
+                    }`}>
+                      {isPlnConnected ? 'CONNECTED' : 'OFFLINE!'}
+                    </span>
+                  </div>
+                )}
              </div>
           </div>
 
@@ -489,73 +610,74 @@ const UPSDashboard: React.FC = () => {
         {/* Right Column (col-span-8): Battery Grid, Chart & Env */}
         <div className="lg:col-span-8 flex flex-col gap-6">
           
-          {/* Premium Battery Cells visualizer */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {cells.map((cell) => (
-              <motion.div 
-                key={cell.id}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4 }}
-                className={`p-6 rounded-3xl border backdrop-blur-xl transition-all duration-300 relative overflow-hidden group ${
-                  cell.status === 'Warning' 
-                  ? 'bg-amber-500/5 border-amber-500/20 shadow-lg shadow-amber-500/5' 
-                  : 'bg-slate-900/20 border-slate-800/50'
-                }`}
-              >
-                {/* Visual Battery Graphic */}
-                <div className="flex items-center gap-4 relative z-10">
-                  {/* Vertical Battery representation */}
-                  <div className="relative w-12 h-24 border-2 border-slate-700/80 rounded-xl p-1 bg-slate-950 flex flex-col justify-end overflow-visible shadow-inner select-none">
-                    {/* Battery nipple */}
-                    <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-4 h-1.5 bg-slate-700 rounded-t-sm shadow-md"></div>
-                    {/* Active Fluid charge visual */}
-                    <div 
-                      className={`w-full rounded-lg transition-all duration-1000 ${
-                        cell.status === 'Warning' 
-                          ? 'bg-gradient-to-t from-amber-600 to-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.4)]' 
-                          : 'bg-gradient-to-t from-emerald-600 to-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.4)]'
-                      }`}
-                      style={{ height: `${cell.health}%` }}
-                    />
-                    {/* Floating capacity percentage overlay */}
-                    <div className="absolute inset-0 flex items-center justify-center font-mono text-[10px] font-black text-slate-300 select-none">
-                      {cell.health}%
+          {/* Adaptive Battery Cells Visualizer */}
+          {activeConfig.sensors?.cells !== false ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {cells.map((cell) => (
+                <motion.div 
+                  key={cell.id}
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4 }}
+                  className={`p-6 rounded-3xl border backdrop-blur-xl transition-all duration-300 relative overflow-hidden group ${
+                    cell.status === 'Warning' 
+                    ? 'bg-amber-500/5 border-amber-500/20 shadow-lg shadow-amber-500/5' 
+                    : 'bg-slate-900/20 border-slate-800/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-4 relative z-10">
+                    <div className="relative w-12 h-24 border-2 border-slate-700/80 rounded-xl p-1 bg-slate-950 flex flex-col justify-end overflow-visible shadow-inner select-none">
+                      <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-4 h-1.5 bg-slate-700 rounded-t-sm shadow-md"></div>
+                      <div 
+                        className={`w-full rounded-lg transition-all duration-1000 ${
+                          cell.status === 'Warning' 
+                            ? 'bg-gradient-to-t from-amber-600 to-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.4)]' 
+                            : 'bg-gradient-to-t from-emerald-600 to-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.4)]'
+                        }`}
+                        style={{ height: `${cell.health}%` }}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center font-mono text-[10px] font-black text-slate-300 select-none">
+                        {cell.health}%
+                      </div>
+                    </div>
+
+                    <div className="flex-1 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-black text-white">{cell.name}</span>
+                        <span className={`text-[8px] font-extrabold px-2 py-0.5 rounded-full border ${
+                          cell.status === 'Warning' 
+                          ? 'bg-amber-500/10 text-amber-500 border-amber-500/20 shadow-sm' 
+                          : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-sm'
+                        }`}>
+                          {cell.status}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Cell Voltage</span>
+                        <span className="text-lg font-mono font-black text-white">{cell.voltage} V</span>
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Cell Temp</span>
+                        <span className="text-sm font-mono font-bold text-slate-300">{cell.temp} °C</span>
+                      </div>
                     </div>
                   </div>
-
-                  {/* Cell telemetry readouts */}
-                  <div className="flex-1 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-black text-white">{cell.name}</span>
-                      <span className={`text-[8px] font-extrabold px-2 py-0.5 rounded-full border ${
-                        cell.status === 'Warning' 
-                        ? 'bg-amber-500/10 text-amber-500 border-amber-500/20 shadow-sm' 
-                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-sm'
-                      }`}>
-                        {cell.status}
-                      </span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Cell Voltage</span>
-                      <span className="text-lg font-mono font-black text-white">{cell.voltage} V</span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Cell Temp</span>
-                      <span className="text-sm font-mono font-bold text-slate-300">{cell.temp} °C</span>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-6 rounded-3xl bg-slate-900/10 border border-slate-800/40 text-center py-8">
+              <span className="text-sm font-semibold text-slate-500 uppercase tracking-widest block mb-1">Battery Cells Block Disabled</span>
+              <p className="text-xs text-slate-600">This UPS configuration does not monitor internal individual battery cells.</p>
+            </div>
+          )}
 
           {/* Chart & Environmental Climate section */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             
-            {/* Chart Room */}
+            {/* Chart Room (Requires cells to plot discharge curves) */}
             <div className="p-6 rounded-3xl bg-slate-900/20 border border-slate-800/50 shadow-xl relative overflow-hidden flex flex-col justify-between">
                <div className="absolute top-0 right-0 p-6 opacity-[0.03]">
                   <Activity size={100} className="text-cyan-500" />
@@ -575,67 +697,46 @@ const UPSDashboard: React.FC = () => {
                </div>
             </div>
 
-            {/* Environmental / Climate Room */}
+            {/* Environmental / Climate Room (Adaptively rendered based on config temperatures list) */}
             <div className="flex flex-col gap-6">
                
-               {/* DHT22 Ambient Panel */}
-               <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-900/30 to-slate-950/20 border border-slate-800/50 shadow-xl">
-                  <h3 className="text-xs font-black text-white uppercase tracking-widest mb-5 flex items-center gap-2">
+               {/* Adaptive Temperatures Panel */}
+               <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-900/30 to-slate-950/20 border border-slate-800/50 shadow-xl flex-1 flex flex-col justify-between">
+                  <h3 className="text-xs font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
                     <Droplets size={14} className="text-cyan-400" />
-                    DHT22 Ambient Environment
+                    Sensors Climate Control Room
                   </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* Temperature gauge */}
-                    <div className="p-4 rounded-2xl bg-slate-950/40 border border-slate-800/50 flex flex-col gap-1.5">
-                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Ambient Temp</span>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-2xl font-black text-white">
-                          {temps.ambient !== undefined ? Number(temps.ambient).toFixed(1) : '28.4'}
-                        </span>
-                        <span className="text-xs font-bold text-slate-500">°C</span>
-                      </div>
-                      <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden mt-1">
-                        <div className="h-full bg-cyan-500" style={{ width: `${Math.min(100, (Number(temps.ambient || 28.4) / 50) * 100)}%` }}></div>
-                      </div>
+                  
+                  {activeConfig.sensors?.temperatures && activeConfig.sensors.temperatures.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {activeConfig.sensors.temperatures.map((temp) => {
+                        const val = temps[temp.id] !== undefined ? Number(temps[temp.id]) : null;
+                        return (
+                          <div key={temp.id} className="p-3.5 rounded-2xl bg-slate-950/40 border border-slate-800/50 flex flex-col gap-1.5 shadow-sm">
+                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block text-ellipsis overflow-hidden whitespace-nowrap" title={temp.label}>
+                              {temp.label}
+                            </span>
+                            <div className="flex items-baseline gap-1">
+                              <span className="text-xl font-black text-white">
+                                {val !== null ? val.toFixed(1) : 'N/A'}
+                              </span>
+                              {val !== null && <span className="text-xs font-bold text-slate-500">°C</span>}
+                            </div>
+                            {val !== null && (
+                              <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden mt-1">
+                                <div className="h-full bg-cyan-500" style={{ width: `${Math.min(100, (val / 70) * 100)}%` }}></div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                    {/* Humidity gauge */}
-                    <div className="p-4 rounded-2xl bg-slate-950/40 border border-slate-800/50 flex flex-col gap-1.5">
-                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Ambient Humidity</span>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-2xl font-black text-white">
-                          {temps.humidity !== undefined ? Number(temps.humidity).toFixed(0) : '62'}
-                        </span>
-                        <span className="text-xs font-bold text-slate-500">%</span>
-                      </div>
-                      <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden mt-1">
-                        <div className="h-full bg-blue-500" style={{ width: `${Number(temps.humidity || 62)}%` }}></div>
-                      </div>
+                  ) : (
+                    <div className="p-4 rounded-2xl bg-slate-950/20 text-center py-6">
+                      <span className="text-xs font-bold text-slate-600 block">No active temperature sensors</span>
                     </div>
-                  </div>
+                  )}
                </div>
-
-               {/* BMS Thermal sensor */}
-               <div className="p-5 rounded-3xl bg-slate-900/20 border border-slate-800/50 shadow-xl flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 rounded-2xl bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                      <Cpu size={22} />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-black text-white uppercase tracking-widest">BMS MOSFET Thermal</h4>
-                      <p className="text-[10px] text-slate-500 font-medium">DS18B20 High-Precision Sensor</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-2xl font-black text-amber-500">
-                      {temps.mosfet !== undefined ? Number(temps.mosfet).toFixed(1) : (systemTemp !== 32.5 ? (systemTemp + 10.3).toFixed(1) : '42.8')}°C
-                    </span>
-                    <div className="flex items-center gap-1.5 justify-end mt-1">
-                      <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></div>
-                      <span className="text-[8px] font-bold text-amber-500/70 uppercase">Warning 65°C</span>
-                    </div>
-                  </div>
-               </div>
-
             </div>
 
           </div>
@@ -761,6 +862,210 @@ const UPSDashboard: React.FC = () => {
         </div>
       )}
 
+      {/* Settings Modal (AnimatePresence for smooth entrance/exit) */}
+      <AnimatePresence>
+        {isSettingsOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Modal backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSettingsOpen(false)}
+              className="absolute inset-0 bg-[#060810]/70 backdrop-blur-sm"
+            />
+
+            {/* Modal content container */}
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto bg-[#0f172a] border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl z-10 text-slate-100 select-none"
+            >
+              {/* Modal close icon */}
+              <button 
+                onClick={() => setIsSettingsOpen(false)}
+                className="absolute top-5 right-5 text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-xl transition-all"
+              >
+                <X size={18} />
+              </button>
+
+              <h2 className="text-xl font-black text-white flex items-center gap-2 mb-6">
+                <Settings size={20} className="text-cyan-400" />
+                UPS Hardware Configuration
+              </h2>
+
+              <div className="space-y-6">
+                {/* Meta properties */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Device Name</label>
+                    <input 
+                      type="text" 
+                      value={settingsName}
+                      onChange={(e) => setSettingsName(e.target.value)}
+                      className="px-4 py-2.5 bg-slate-950/50 border border-slate-850 focus:border-cyan-500 focus:outline-none rounded-xl text-sm text-white"
+                      placeholder="e.g. UPS Server Room"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Location / Slot</label>
+                    <input 
+                      type="text" 
+                      value={settingsLocation}
+                      onChange={(e) => setSettingsLocation(e.target.value)}
+                      className="px-4 py-2.5 bg-slate-950/50 border border-slate-850 focus:border-cyan-500 focus:outline-none rounded-xl text-sm text-white"
+                      placeholder="e.g. Rack A-4"
+                    />
+                  </div>
+                </div>
+
+                {/* Electrical Sensors Toggles */}
+                <div className="p-5 rounded-2xl bg-slate-950/30 border border-slate-850 space-y-4">
+                  <h3 className="text-xs font-black text-cyan-400 uppercase tracking-widest mb-1">Grid & Power Hardware Toggles</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Toggle cells */}
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={settingsCells}
+                        onChange={(e) => setSettingsCells(e.target.checked)}
+                        className="rounded border-slate-800 bg-slate-950 text-cyan-500 focus:ring-cyan-500/20"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-200 block">Battery Cells (3S)</span>
+                        <span className="text-[9px] text-slate-500 block">Voltage Sensor analog</span>
+                      </div>
+                    </label>
+                    
+                    {/* Toggle voltageIn */}
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={settingsVoltageIn}
+                        onChange={(e) => setSettingsVoltageIn(e.target.checked)}
+                        className="rounded border-slate-800 bg-slate-950 text-cyan-500 focus:ring-cyan-500/20"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-200 block">PLN In Detector</span>
+                        <span className="text-[9px] text-slate-500 block">Grid outage monitor</span>
+                      </div>
+                    </label>
+
+                    {/* Toggle INA 12V */}
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={settingsIna12v}
+                        onChange={(e) => setSettingsIna12v(e.target.checked)}
+                        className="rounded border-slate-800 bg-slate-950 text-cyan-500 focus:ring-cyan-500/20"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-200 block">INA219 (12V Bus)</span>
+                        <span className="text-[9px] text-slate-500 block">Bus 12V Current & Volt</span>
+                      </div>
+                    </label>
+
+                    {/* Toggle INA 5V */}
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={settingsIna5v}
+                        onChange={(e) => setSettingsIna5v(e.target.checked)}
+                        className="rounded border-slate-800 bg-slate-950 text-cyan-500 focus:ring-cyan-500/20"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-200 block">INA219 (5V Bus)</span>
+                        <span className="text-[9px] text-slate-500 block">Bus 5V Current & Volt</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Temperature Sensors List Editor */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-black text-cyan-400 uppercase tracking-widest">Active Temperature Sensors</h3>
+                  
+                  {/* List */}
+                  <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
+                    {settingsTemps.map((temp) => (
+                      <div key={temp.id} className="flex items-center justify-between p-3 bg-slate-950/40 border border-slate-850 rounded-xl">
+                        <div className="flex items-center gap-3">
+                          <Thermometer size={14} className="text-slate-500" />
+                          <div>
+                            <span className="text-xs font-bold text-slate-200">{temp.label}</span>
+                            <span className="text-[9px] font-mono text-slate-500 block">ID: {temp.id}</span>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => removeTempSensorSetting(temp.id)}
+                          className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
+                          title="Remove Temp Sensor"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                    {settingsTemps.length === 0 && (
+                      <p className="text-xs text-slate-500 italic py-2">No temperature sensors added yet.</p>
+                    )}
+                  </div>
+
+                  {/* Add Temp Form */}
+                  <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                    <div className="sm:col-span-4 flex flex-col gap-1.5">
+                      <label className="text-[9px] text-slate-500 font-bold uppercase">Sensor key / ID</label>
+                      <input 
+                        type="text"
+                        value={newTempId}
+                        onChange={(e) => setNewTempId(e.target.value.toLowerCase().replace(/\s+/g, ''))}
+                        className="px-3 py-2 bg-slate-950/50 border border-slate-850 focus:border-cyan-500 focus:outline-none rounded-lg text-xs text-white"
+                        placeholder="e.g. heatsink"
+                      />
+                    </div>
+                    <div className="sm:col-span-6 flex flex-col gap-1.5">
+                      <label className="text-[9px] text-slate-500 font-bold uppercase">Display Name / Label</label>
+                      <input 
+                        type="text"
+                        value={newTempLabel}
+                        onChange={(e) => setNewTempLabel(e.target.value)}
+                        className="px-3 py-2 bg-slate-950/50 border border-slate-850 focus:border-cyan-500 focus:outline-none rounded-lg text-xs text-white"
+                        placeholder="e.g. Heatsink Temp"
+                      />
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={addTempSensorSetting}
+                      className="sm:col-span-2 w-full py-2 bg-cyan-500 hover:bg-cyan-600 text-slate-950 rounded-lg font-bold text-xs flex items-center justify-center gap-1 transition-all active:scale-95 cursor-pointer"
+                    >
+                      <Plus size={14} />
+                      Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions Footer */}
+              <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-slate-850">
+                <button 
+                  onClick={() => setIsSettingsOpen(false)}
+                  className="px-5 py-2.5 bg-slate-900 border border-slate-850 hover:border-slate-700 text-slate-400 hover:text-white rounded-xl font-bold text-xs transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={saveSettings}
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 text-slate-950 rounded-xl font-black text-xs shadow-lg shadow-cyan-500/10 flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  {isSubmitting ? 'Saving...' : 'Save Configuration'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Footer Status Bar */}
       <footer className="mt-12 pt-6 border-t border-slate-900/60 flex flex-col md:flex-row justify-between items-center gap-4 text-slate-500">
         <div className="flex items-center gap-6">
@@ -774,7 +1079,7 @@ const UPSDashboard: React.FC = () => {
           </div>
         </div>
         <div className="text-[9px] font-mono tracking-tight opacity-40 uppercase font-semibold">
-          DIY SMART UPS CONTROL HUB v1.2.0-PRO // DESIGNED BY ANTIGRAVITY FOR TOPS GARDEN
+          DIY SMART UPS CONTROL HUB v1.3.0-ADAPTIVE // DESIGNED BY ANTIGRAVITY FOR TOPS GARDEN
         </div>
       </footer>
     </div>
