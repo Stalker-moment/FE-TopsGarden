@@ -507,7 +507,26 @@ const UPSDashboard: React.FC = () => {
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full lg:w-auto">
           {/* Custom Dropdown Device Selector & Settings Gear */}
-          {devices.length > 0 && (
+          {devices.length === 0 ? (
+            <button 
+              onClick={() => {
+                setIsAddingMode(true);
+                setNewDeviceId('');
+                setSettingsName('');
+                setSettingsLocation('');
+                setSettingsCells(true);
+                setSettingsVoltageIn(true);
+                setSettingsIna12v(true);
+                setSettingsIna5v(true);
+                setSettingsTemps(DEFAULT_CONFIG.sensors.temperatures);
+                setIsSettingsOpen(true);
+              }}
+              className="px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 text-xs font-black rounded-2xl flex items-center gap-1.5 transition-all shadow-lg shadow-cyan-500/10 active:scale-95 cursor-pointer"
+            >
+              <Plus size={14} />
+              Register First UPS Device
+            </button>
+          ) : (
             <div className="flex items-center gap-3 w-full sm:w-auto">
               <div className="flex flex-1 sm:flex-none items-center gap-3 bg-slate-900/60 border border-slate-800/80 rounded-2xl px-4 py-2 w-full">
                 <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest whitespace-nowrap">Hardware:</span>
