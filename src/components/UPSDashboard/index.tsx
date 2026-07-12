@@ -27,43 +27,66 @@ import {
 } from 'lucide-react';
 import { ServerBatteryInfo } from '@/types/pzem';
 import { UpsDevice, UpsLog } from '@/types/ups';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 
 const ReactApexChart = dynamic(() => import('react-apexcharts'), { ssr: false });
 
-// Static Chart Configs to avoid re-renders
+// Premium Chart Configs with glowing drop shadow
 const CHART_OPTIONS: any = {
   chart: {
     type: 'area',
     toolbar: { show: false },
     background: 'transparent',
-    animations: { enabled: true }
+    animations: { enabled: true, speed: 800 },
+    dropShadow: {
+      enabled: true,
+      top: 4,
+      left: 0,
+      blur: 6,
+      opacity: 0.15
+    }
   },
-  colors: ['#22d3ee', '#fbbf24'],
+  colors: ['#06b6d4', '#f59e0b'],
   dataLabels: { enabled: false },
-  stroke: { curve: 'smooth', width: 2 },
-  grid: { borderColor: '#334155', strokeDashArray: 4 },
+  stroke: { curve: 'smooth', width: 3 },
+  grid: { 
+    borderColor: 'rgba(51, 65, 85, 0.4)', 
+    strokeDashArray: 5,
+    xaxis: { lines: { show: true } },
+    yaxis: { lines: { show: true } }
+  },
   xaxis: {
-    categories: ['10:00', '10:05', '10:10', '10:15', '10:20', '10:25', '10:30'],
-    labels: { style: { colors: '#94a3b8', fontSize: '10px' } },
+    labels: { style: { colors: '#64748b', fontSize: '10px', fontWeight: 600 } },
     axisBorder: { show: false },
     axisTicks: { show: false }
   },
   yaxis: {
-    labels: { style: { colors: '#94a3b8', fontSize: '10px' } }
+    labels: { style: { colors: '#64748b', fontSize: '10px', fontWeight: 600 } }
   },
   fill: {
     type: 'gradient',
     gradient: {
       shadeIntensity: 1,
-      opacityFrom: 0.4,
-      opacityTo: 0.1,
-      stops: [0, 90, 100]
+      opacityFrom: 0.35,
+      opacityTo: 0.05,
+      stops: [0, 95, 100]
     }
   },
-  tooltip: { theme: 'dark' },
-  legend: { show: true, position: 'top', horizontalAlign: 'right', labels: { colors: '#e2e8f0' } }
+  tooltip: { 
+    theme: 'dark',
+    x: { show: true },
+    style: { fontSize: '11px', fontFamily: 'var(--font-sans)' }
+  },
+  legend: { 
+    show: true, 
+    position: 'top', 
+    horizontalAlign: 'right', 
+    labels: { colors: '#94a3b8' },
+    fontSize: '11px',
+    fontWeight: 600,
+    markers: { radius: 12 }
+  }
 };
 
 const HTTPS_API_URL = process.env.NEXT_PUBLIC_HTTPS_API_URL || "localhost:3001";
@@ -75,7 +98,7 @@ const UPSDashboard: React.FC = () => {
   const [hasMounted, setHasMounted] = useState(false);
   const [serverBattery, setServerBattery] = useState<ServerBatteryInfo | null>(null);
 
-  // Real data state
+  // Real data states
   const [devices, setDevices] = useState<UpsDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [realtimeData, setRealtimeData] = useState<UpsLog | null>(null);
@@ -181,7 +204,6 @@ const UPSDashboard: React.FC = () => {
     const batteryInterval = setInterval(fetchServerBattery, 30000);
     const devicesInterval = setInterval(fetchDevices, 60000);
 
-    // Dynamic session uptime increments
     const start = Date.now() - 8095000; // Mock 2 hours 14 mins
     const uptimeInterval = setInterval(() => {
       const diff = Date.now() - start;
@@ -201,34 +223,33 @@ const UPSDashboard: React.FC = () => {
     };
   }, [fetchServerBattery, fetchDevices]);
 
-  // Server Battery helpers
+  // Server Battery details
   const batteryPercent = serverBattery?.percent ?? 0;
-  const batteryColor = batteryPercent >= 50 ? '#22d3ee' : batteryPercent >= 20 ? '#fbbf24' : '#ef4444';
+  const batteryColor = batteryPercent >= 50 ? '#06b6d4' : batteryPercent >= 20 ? '#fbbf24' : '#ef4444';
   const batteryBgColor = batteryPercent >= 50 ? 'bg-cyan-500' : batteryPercent >= 20 ? 'bg-yellow-500' : 'bg-red-500';
   const batteryGlow = batteryPercent >= 50 ? 'shadow-cyan-500/20' : batteryPercent >= 20 ? 'shadow-yellow-500/20' : 'shadow-red-500/20';
   const cpuTemp = serverBattery?.cpuTempMax ?? 0;
-  const cpuTempColor = cpuTemp > 80 ? 'text-red-400' : cpuTemp > 65 ? 'text-amber-400' : 'text-emerald-400';
+  const cpuTempColor = cpuTemp > 80 ? 'text-red-400 animate-pulse' : cpuTemp > 65 ? 'text-amber-400' : 'text-emerald-400';
   const memUsed = serverBattery?.memUsedPercent ?? 0;
-  const memColor = memUsed > 85 ? 'text-red-400' : memUsed > 65 ? 'text-amber-400' : 'text-emerald-400';
+  const memColor = memUsed > 85 ? 'text-red-400 animate-pulse' : memUsed > 65 ? 'text-amber-400' : 'text-emerald-400';
 
-  // Dynamic Telemetry Mappings
+  // Outage parameters & status
   const isOutage = realtimeData ? (realtimeData.voltageIn < 2.0) : false;
   const isPlnConnected = realtimeData 
     ? (realtimeData.voltageIn >= 2.0) 
     : (serverBattery?.acConnected ?? true);
 
+  // Dynamic Telemetry Mappings
   const totalVoltageVal = realtimeData?.totalVoltage !== undefined ? Number(realtimeData.totalVoltage).toFixed(2) : '11.45';
-  // Calculated load current: SUM of 12V and 5V outputs
   const loadCurrentVal = realtimeData ? Math.round((realtimeData.current12v || 0) + (realtimeData.current5v || 0)).toString() : '450';
-  // Calculated power consumption: (V12 * A12) + (V5 * A5)
   const powerVal = realtimeData 
     ? ((realtimeData.voltage12v * (realtimeData.current12v / 1000)) + (realtimeData.voltage5v * (realtimeData.current5v / 1000))).toFixed(2)
     : '5.15';
 
   const dynamicMetrics = [
-    { id: 1, title: 'Total Battery Voltage', value: totalVoltageVal, unit: 'V', icon: Battery, color: 'text-cyan-400', glow: 'shadow-cyan-500/20' },
-    { id: 2, title: 'Combined Load Current', value: loadCurrentVal, unit: 'mA', icon: Activity, color: 'text-emerald-400', glow: 'shadow-emerald-500/20' },
-    { id: 3, title: 'Total Power Output', value: powerVal, unit: 'W', icon: Zap, color: 'text-cyan-500', glow: 'shadow-cyan-600/20' },
+    { id: 1, title: 'Total Battery Voltage', value: totalVoltageVal, unit: 'V', icon: Battery, color: 'text-cyan-400', glow: 'shadow-cyan-500/10 hover:shadow-cyan-500/20', desc: 'Sensing: Cumulative 3S Pack' },
+    { id: 2, title: 'Combined Load Current', value: loadCurrentVal, unit: 'mA', icon: Activity, color: 'text-emerald-400', glow: 'shadow-emerald-500/10 hover:shadow-emerald-500/20', desc: 'Dual Bus: INA219 (12V + 5V)' },
+    { id: 3, title: 'Total Power Output', value: powerVal, unit: 'W', icon: Zap, color: 'text-amber-400', glow: 'shadow-amber-500/10 hover:shadow-amber-500/20', desc: 'Realtime Power Consumption' },
   ];
 
   // Temperature readings
@@ -256,9 +277,9 @@ const UPSDashboard: React.FC = () => {
   };
 
   const cells = [
-    { id: 1, name: 'Cell 1 (0-4.2V)', voltage: cell1Val, temp: cell1Temp, health: getCellHealth(cell1Val), status: getCellStatus(cell1Val) },
-    { id: 2, name: 'Cell 2 (0-4.2V)', voltage: cell2Val, temp: cell2Temp, health: getCellHealth(cell2Val), status: getCellStatus(cell2Val) },
-    { id: 3, name: 'Cell 3 (0-4.2V)', voltage: cell3Val, temp: cell3Temp, health: getCellHealth(cell3Val), status: getCellStatus(cell3Val) },
+    { id: 1, name: 'Cell 1 (3.0 - 4.2V)', voltage: cell1Val, temp: cell1Temp, health: getCellHealth(cell1Val), status: getCellStatus(cell1Val) },
+    { id: 2, name: 'Cell 2 (3.0 - 4.2V)', voltage: cell2Val, temp: cell2Temp, health: getCellHealth(cell2Val), status: getCellStatus(cell2Val) },
+    { id: 3, name: 'Cell 3 (3.0 - 4.2V)', voltage: cell3Val, temp: cell3Temp, health: getCellHealth(cell3Val), status: getCellStatus(cell3Val) },
   ];
 
   // Dynamic Chart Options mapping
@@ -289,52 +310,54 @@ const UPSDashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-slate-200 p-4 md:p-8 font-sans">
+    <div className="min-h-screen bg-[#0b0f19] text-slate-200 p-4 md:p-6 lg:p-8 font-sans transition-colors duration-300">
       
-      {/* Header */}
-      <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-10">
+      {/* Header Section */}
+      <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8 p-6 bg-slate-900/25 border border-slate-800/40 rounded-3xl backdrop-blur-xl">
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-cyan-500/10 rounded-2xl border border-cyan-500/20">
+          <div className="p-3.5 bg-gradient-to-br from-cyan-500/10 to-blue-500/5 rounded-2xl border border-cyan-500/25 shadow-lg shadow-cyan-500/5">
             <Server className="text-cyan-400" size={32} />
           </div>
           <div>
-            <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
-              UPS_TIER_01
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-black tracking-tight text-white">
+                UPS_TIER_01
+              </h1>
               {selectedDeviceId ? (
-                <span className="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded-full border border-cyan-500/30 uppercase tracking-widest font-bold">
+                <span className="text-[10px] bg-gradient-to-r from-cyan-500/20 to-blue-500/10 text-cyan-400 px-3 py-1 rounded-full border border-cyan-500/30 uppercase tracking-widest font-bold shadow-sm">
                   {devices.find(d => d.id === selectedDeviceId)?.name || "Active"}
                 </span>
               ) : (
-                <span className="text-[10px] bg-slate-500/20 text-slate-400 px-2 py-0.5 rounded-full border border-slate-500/30 uppercase tracking-widest font-bold">
-                  Mockup
+                <span className="text-[10px] bg-slate-800 text-slate-400 px-3 py-1 rounded-full border border-slate-700 uppercase tracking-widest font-bold">
+                  Mockup Mode
                 </span>
               )}
-            </h1>
-            <div className="flex items-center gap-4 mt-1">
+            </div>
+            <div className="flex items-center gap-4 mt-2">
               <span className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
-                <Clock size={12} />
-                Uptime: <span className="text-emerald-400 font-mono">{uptime}</span>
+                <Clock size={12} className="text-slate-500" />
+                Uptime: <span className="text-emerald-400 font-mono font-bold">{uptime}</span>
               </span>
               <span className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
-                <Radio size={12} className={status === "ONLINE" ? "animate-pulse text-emerald-400" : "text-slate-400"} />
-                Signal: <span className="text-cyan-400 font-mono">-64 dBm</span>
+                <Radio size={12} className={status === "ONLINE" ? "animate-pulse text-emerald-400" : "text-rose-400"} />
+                Status: <span className={`font-mono font-bold ${status === "ONLINE" ? "text-cyan-400" : "text-rose-400"}`}>{status}</span>
               </span>
             </div>
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full lg:w-auto">
-          {/* Device Dropdown Selector */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full lg:w-auto">
+          {/* Custom Dropdown Device Selector */}
           {devices.length > 0 && (
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <span className="text-xs text-slate-500 font-bold uppercase tracking-widest whitespace-nowrap">Hardware Select:</span>
+            <div className="flex items-center gap-3 bg-slate-900/60 border border-slate-800/80 rounded-2xl px-4 py-2 w-full sm:w-auto">
+              <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest whitespace-nowrap">Hardware:</span>
               <select
                 value={selectedDeviceId || ''}
                 onChange={(e) => setSelectedDeviceId(e.target.value)}
-                className="flex-1 sm:flex-none pl-3 pr-8 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-1 focus:ring-cyan-500 cursor-pointer"
+                className="bg-transparent border-none text-xs font-bold text-white focus:outline-none cursor-pointer text-ellipsis overflow-hidden w-full sm:w-[150px] md:w-[200px]"
               >
                 {devices.map((d) => (
-                  <option key={d.id} value={d.id}>
+                  <option key={d.id} value={d.id} className="bg-[#0b0f19] text-white">
                     {d.name} {d.location ? `(${d.location})` : ''}
                   </option>
                 ))}
@@ -342,237 +365,277 @@ const UPSDashboard: React.FC = () => {
             </div>
           )}
 
-          <div className="flex-1 lg:flex-none flex items-center justify-between gap-8 px-6 py-3 bg-slate-800/50 border border-slate-700/50 rounded-2xl backdrop-blur-md w-full sm:w-auto">
+          {/* Quick Stats Pill */}
+          <div className="flex flex-1 lg:flex-none items-center justify-between gap-6 px-6 py-3 bg-slate-950/40 border border-slate-800/50 rounded-2xl backdrop-blur-md w-full sm:w-auto">
             <div className="flex flex-col">
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">UPS Connection</span>
-              <span className={`text-sm font-black flex items-center gap-2 ${status === "ONLINE" ? "text-emerald-400" : "text-red-400"}`}>
-                <Power size={14} className={status === "ONLINE" ? "text-emerald-400" : "text-red-400"} />
-                {status}
-              </span>
-            </div>
-            <div className="w-[1px] h-8 bg-slate-700"></div>
-            <div className="flex flex-col">
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Power Mode</span>
+              <span className="text-[9px] text-slate-500 font-black uppercase tracking-widest">UPS Mode</span>
               {status === "ONLINE" ? (
                 isOutage ? (
-                  <span className="text-sm font-black text-rose-400 flex items-center gap-2 animate-pulse">
-                    <Zap size={14} className="text-rose-400" />
-                    OUTAGE (BATTERY)
+                  <span className="text-xs font-bold text-rose-400 flex items-center gap-1.5 animate-pulse mt-0.5">
+                    <Zap size={12} className="text-rose-400" />
+                    DISCHARGING (OUTAGE)
                   </span>
                 ) : (
-                  <span className="text-sm font-black text-emerald-400 flex items-center gap-2">
-                    <CheckCircle2 size={14} />
-                    PLN OK (CHARGING)
+                  <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 mt-0.5">
+                    <CheckCircle2 size={12} />
+                    STANDBY (PLN)
                   </span>
                 )
               ) : (
-                <span className="text-sm font-black text-slate-500 flex items-center gap-2">
-                  <AlertTriangle size={14} />
+                <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5 mt-0.5">
+                  <AlertTriangle size={12} />
                   OFFLINE
                 </span>
               )}
+            </div>
+            <div className="w-[1px] h-6 bg-slate-800"></div>
+            <div className="flex flex-col">
+              <span className="text-[9px] text-slate-500 font-black uppercase tracking-widest">Safety Integrity</span>
+              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 mt-0.5">
+                <CheckCircle2 size={12} />
+                SECURE
+              </span>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+      {/* Grid Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* Left Column: Big Metrics */}
-        <div className="lg:col-span-1 flex flex-col gap-6">
+        {/* Left Column (col-span-4): Big Metrics & Safety */}
+        <div className="lg:col-span-4 flex flex-col gap-6">
+          
+          {/* Main metrics */}
           {dynamicMetrics.map((metric) => (
             <motion.div 
               key={metric.id}
-              whileHover={{ scale: 1.02 }}
-              className={`p-6 rounded-[2rem] bg-slate-900/50 border border-slate-800 backdrop-blur-xl relative overflow-hidden group shadow-xl ${metric.glow}`}
+              whileHover={{ y: -4, scale: 1.01 }}
+              className={`p-6 rounded-3xl bg-slate-900/20 border border-slate-800/50 backdrop-blur-xl relative overflow-hidden group shadow-lg transition-all duration-300 ${metric.glow}`}
             >
-              <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
-                <metric.icon size={80} />
+              <div className="absolute top-0 right-0 p-6 opacity-[0.02] group-hover:opacity-[0.08] transition-opacity duration-300">
+                <metric.icon size={110} />
               </div>
               <div className="flex flex-col relative z-10">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">{metric.title}</span>
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">{metric.title}</span>
                 <div className="flex items-baseline gap-2">
-                  <h2 className={`text-4xl font-black tracking-tighter ${metric.color}`}>
+                  <h2 className={`text-4xl font-extrabold tracking-tighter ${metric.color}`}>
                     {metric.value}
                   </h2>
-                  <span className="text-lg font-bold text-slate-600">{metric.unit}</span>
+                  <span className="text-sm font-bold text-slate-500 uppercase">{metric.unit}</span>
                 </div>
-                <div className="mt-4 flex items-center gap-2">
-                   <div className="h-1.5 flex-1 bg-slate-800 rounded-full overflow-hidden">
-                      <div className={`h-full bg-current ${metric.color} opacity-50`} style={{ width: '70%' }}></div>
+                <div className="mt-4 flex items-center justify-between gap-3">
+                   <div className="h-1 flex-1 bg-slate-800 rounded-full overflow-hidden">
+                      <div className={`h-full bg-current ${metric.color} opacity-60`} style={{ width: '70%' }}></div>
                    </div>
-                   <span className="text-[10px] font-mono text-slate-500 italic">INA219 Realtime</span>
+                   <span className="text-[9px] font-semibold text-slate-600 font-mono tracking-tight">{metric.desc}</span>
                 </div>
               </div>
             </motion.div>
           ))}
           
           {/* Safety Alerts Card */}
-          <div className="p-6 rounded-[2rem] bg-slate-900/50 border border-slate-800 shadow-xl">
-             <h3 className="text-sm font-black text-white uppercase tracking-widest mb-6 flex items-center gap-2">
-                <ShieldAlert size={16} className="text-amber-500" />
-                Safety Monitors
+          <div className="p-6 rounded-3xl bg-slate-900/20 border border-slate-800/50 shadow-xl relative overflow-hidden">
+             <div className="absolute top-0 right-0 p-6 opacity-[0.03]"><ShieldAlert size={80} /></div>
+             <h3 className="text-xs font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
+                <ShieldAlert size={14} className="text-amber-500" />
+                Safety Control Room
              </h3>
-             <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+             <div className="space-y-3 relative z-10">
+                {/* MQ2 Sensor */}
+                <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-950/40 border border-slate-800/50">
                   <div className="flex items-center gap-3">
-                    <Flame size={18} className="text-emerald-400" />
-                    <span className="text-sm font-bold text-slate-300">MQ-2 Gas/Smoke</span>
+                    <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400"><Flame size={16} /></div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-300 block">MQ-2 Gas/Smoke</span>
+                      <span className="text-[9px] text-slate-500 uppercase font-mono">Safety sensor</span>
+                    </div>
                   </div>
-                  <span className="text-[10px] font-black text-emerald-400 uppercase tracking-tighter bg-emerald-500/10 px-2 py-0.5 rounded">CLEAR</span>
+                  <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-0.5 rounded-full">CLEAR</span>
                 </div>
-                 <div className={`flex items-center justify-between p-3 rounded-xl ${isPlnConnected ? 'bg-cyan-500/5 border border-cyan-500/20' : 'bg-red-500/5 border border-red-500/20'}`}>
-                    <div className="flex items-center gap-3">
-                      <Zap size={18} className={isPlnConnected ? 'text-cyan-400' : 'text-red-400'} />
-                      <span className="text-sm font-bold text-slate-300">
-                        PLN Detector {realtimeData?.voltageIn !== undefined && `(${Number(realtimeData.voltageIn).toFixed(1)}V)`}
+
+                {/* PLN Outage Sensor */}
+                <div className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all duration-500 ${
+                  isPlnConnected 
+                    ? 'bg-slate-950/40 border-slate-800/50' 
+                    : 'bg-rose-500/10 border-rose-500/25 shadow-lg shadow-rose-500/5'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-xl ${isPlnConnected ? 'bg-cyan-500/10 text-cyan-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                      <Zap size={16} className={isPlnConnected ? '' : 'animate-pulse'} />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-300 block">
+                        Grid Adapter Input
+                      </span>
+                      <span className="text-[9px] text-slate-500 uppercase font-mono">
+                        PLN Status {realtimeData?.voltageIn !== undefined && `(${Number(realtimeData.voltageIn).toFixed(1)}V)`}
                       </span>
                     </div>
-                    <span className={`text-[10px] font-black uppercase tracking-tighter px-2 py-0.5 rounded ${
-                      isPlnConnected 
-                        ? 'bg-cyan-500/10 text-cyan-400'
-                        : 'bg-red-500/10 text-red-400 animate-pulse'
-                    }`}>
-                      {isPlnConnected ? 'CONNECTED' : 'OFFLINE!'}
-                    </span>
-                  </div> 
+                  </div>
+                  <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full border ${
+                    isPlnConnected 
+                      ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/25'
+                      : 'bg-rose-500/20 text-rose-400 border-rose-500/30 animate-pulse'
+                  }`}>
+                    {isPlnConnected ? 'CONNECTED' : 'OFFLINE!'}
+                  </span>
+                </div>
              </div>
           </div>
+
         </div>
 
-        {/* Center: Battery Health Grid & Charts */}
-        <div className="lg:col-span-3 flex flex-col gap-8">
+        {/* Right Column (col-span-8): Battery Grid, Chart & Env */}
+        <div className="lg:col-span-8 flex flex-col gap-6">
           
-          {/* Battery Grid */}
+          {/* Premium Battery Cells visualizer */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {cells.map((cell) => (
               <motion.div 
                 key={cell.id}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`p-6 rounded-[2rem] border backdrop-blur-xl transition-all ${
+                transition={{ duration: 0.4 }}
+                className={`p-6 rounded-3xl border backdrop-blur-xl transition-all duration-300 relative overflow-hidden group ${
                   cell.status === 'Warning' 
-                  ? 'bg-amber-500/5 border-amber-500/30 shadow-amber-500/10 shadow-lg' 
-                  : 'bg-slate-900/50 border-slate-800'
+                  ? 'bg-amber-500/5 border-amber-500/20 shadow-lg shadow-amber-500/5' 
+                  : 'bg-slate-900/20 border-slate-800/50'
                 }`}
               >
-                <div className="flex justify-between items-start mb-6">
-                  <div className="p-2.5 rounded-xl bg-slate-800 text-slate-400">
-                    <Battery size={20} className={cell.status === 'Warning' ? 'text-amber-500' : 'text-cyan-400'} />
-                  </div>
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest border ${
-                    cell.status === 'Warning' 
-                    ? 'bg-amber-500/20 text-amber-500 border-amber-500/30' 
-                    : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                  }`}>
-                    {cell.status}
-                  </span>
-                </div>
-                
-                <h4 className="text-lg font-black text-white mb-4">{cell.name}</h4>
-                
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Voltage</span>
-                    <span className="text-xl font-mono font-black text-white">{cell.voltage}V</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Cell Temp</span>
-                    <span className="text-xl font-mono font-black text-white">{cell.temp}°C</span>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                    <span>Est. Capacity</span>
-                    <span>{cell.health}%</span>
-                  </div>
-                  <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700">
+                {/* Visual Battery Graphic */}
+                <div className="flex items-center gap-4 relative z-10">
+                  {/* Vertical Battery representation */}
+                  <div className="relative w-12 h-24 border-2 border-slate-700/80 rounded-xl p-1 bg-slate-950 flex flex-col justify-end overflow-visible shadow-inner select-none">
+                    {/* Battery nipple */}
+                    <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-4 h-1.5 bg-slate-700 rounded-t-sm shadow-md"></div>
+                    {/* Active Fluid charge visual */}
                     <div 
-                      className={`h-full rounded-full transition-all duration-1000 ${
-                        cell.status === 'Warning' ? 'bg-amber-500 shadow-[0_0_10px_#f59e0b]' : 'bg-emerald-500 shadow-[0_0_10px_#10b981]'
-                      }`} 
-                      style={{ width: `${cell.health}%` }}
+                      className={`w-full rounded-lg transition-all duration-1000 ${
+                        cell.status === 'Warning' 
+                          ? 'bg-gradient-to-t from-amber-600 to-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.4)]' 
+                          : 'bg-gradient-to-t from-emerald-600 to-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.4)]'
+                      }`}
+                      style={{ height: `${cell.health}%` }}
                     />
+                    {/* Floating capacity percentage overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center font-mono text-[10px] font-black text-slate-300 select-none">
+                      {cell.health}%
+                    </div>
+                  </div>
+
+                  {/* Cell telemetry readouts */}
+                  <div className="flex-1 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-black text-white">{cell.name}</span>
+                      <span className={`text-[8px] font-extrabold px-2 py-0.5 rounded-full border ${
+                        cell.status === 'Warning' 
+                        ? 'bg-amber-500/10 text-amber-500 border-amber-500/20 shadow-sm' 
+                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-sm'
+                      }`}>
+                        {cell.status}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Cell Voltage</span>
+                      <span className="text-lg font-mono font-black text-white">{cell.voltage} V</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Cell Temp</span>
+                      <span className="text-sm font-mono font-bold text-slate-300">{cell.temp} °C</span>
+                    </div>
                   </div>
                 </div>
               </motion.div>
             ))}
           </div>
 
-          {/* Environmental & BMS Section */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Chart & Environmental Climate section */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             
-            {/* Chart Area */}
-            <div className="p-8 rounded-[2.5rem] bg-slate-900/50 border border-slate-800 shadow-2xl relative overflow-hidden">
-               <div className="absolute top-0 right-0 p-8 opacity-10">
-                  <Activity size={120} className="text-cyan-500" />
+            {/* Chart Room */}
+            <div className="p-6 rounded-3xl bg-slate-900/20 border border-slate-800/50 shadow-xl relative overflow-hidden flex flex-col justify-between">
+               <div className="absolute top-0 right-0 p-6 opacity-[0.03]">
+                  <Activity size={100} className="text-cyan-500" />
                </div>
-               <h3 className="text-lg font-black text-white mb-8 flex items-center gap-3 relative z-10">
-                  <LayoutDashboard className="text-cyan-400" />
+               <h3 className="text-xs font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2 relative z-10">
+                  <LayoutDashboard className="text-cyan-400" size={14} />
                   Engineering Analytics (50 Logs)
                </h3>
-               <div className="h-[250px] relative z-10 w-full overflow-hidden">
+               <div className="h-[230px] relative z-10 w-full">
                   {hasMounted ? (
-                    <ReactApexChart options={dynamicChartOptions} series={chartSeries} type="area" height={250} width="100%" />
+                    <ReactApexChart options={dynamicChartOptions} series={chartSeries} type="area" height={230} width="100%" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-slate-700 animate-pulse">
-                      <Activity size={40} />
+                      <Activity size={32} />
                     </div>
                   )}
                </div>
             </div>
 
-            {/* Environmental & Thermal */}
+            {/* Environmental / Climate Room */}
             <div className="flex flex-col gap-6">
-               <div className="flex-1 p-6 rounded-[2rem] bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 shadow-xl">
-                  <h3 className="text-sm font-black text-white uppercase tracking-widest mb-6 flex items-center gap-2">
-                    <Droplets size={16} className="text-cyan-400" />
+               
+               {/* DHT22 Ambient Panel */}
+               <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-900/30 to-slate-950/20 border border-slate-800/50 shadow-xl">
+                  <h3 className="text-xs font-black text-white uppercase tracking-widest mb-5 flex items-center gap-2">
+                    <Droplets size={14} className="text-cyan-400" />
                     DHT22 Ambient Environment
                   </h3>
-                  <div className="grid grid-cols-2 gap-6">
-                    <div className="p-4 rounded-2xl bg-slate-800/40 border border-slate-700/50 flex flex-col gap-1">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase">Temperature</span>
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Temperature gauge */}
+                    <div className="p-4 rounded-2xl bg-slate-950/40 border border-slate-800/50 flex flex-col gap-1.5">
+                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Ambient Temp</span>
                       <div className="flex items-baseline gap-1">
-                        <span className="text-3xl font-black text-white">
+                        <span className="text-2xl font-black text-white">
                           {temps.ambient !== undefined ? Number(temps.ambient).toFixed(1) : '28.4'}
                         </span>
-                        <span className="text-sm font-bold text-slate-500">°C</span>
+                        <span className="text-xs font-bold text-slate-500">°C</span>
+                      </div>
+                      <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden mt-1">
+                        <div className="h-full bg-cyan-500" style={{ width: `${Math.min(100, (Number(temps.ambient || 28.4) / 50) * 100)}%` }}></div>
                       </div>
                     </div>
-                    <div className="p-4 rounded-2xl bg-slate-800/40 border border-slate-700/50 flex flex-col gap-1">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase">Humidity</span>
+                    {/* Humidity gauge */}
+                    <div className="p-4 rounded-2xl bg-slate-950/40 border border-slate-800/50 flex flex-col gap-1.5">
+                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Ambient Humidity</span>
                       <div className="flex items-baseline gap-1">
-                        <span className="text-3xl font-black text-white">
+                        <span className="text-2xl font-black text-white">
                           {temps.humidity !== undefined ? Number(temps.humidity).toFixed(0) : '62'}
                         </span>
-                        <span className="text-sm font-bold text-slate-500">%</span>
+                        <span className="text-xs font-bold text-slate-500">%</span>
+                      </div>
+                      <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden mt-1">
+                        <div className="h-full bg-blue-500" style={{ width: `${Number(temps.humidity || 62)}%` }}></div>
                       </div>
                     </div>
                   </div>
                </div>
 
-               <div className="p-6 rounded-[2rem] bg-slate-900/50 border border-slate-800 shadow-xl flex items-center justify-between">
+               {/* BMS Thermal sensor */}
+               <div className="p-5 rounded-3xl bg-slate-900/20 border border-slate-800/50 shadow-xl flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="p-3 rounded-2xl bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                      <Cpu size={24} />
+                      <Cpu size={22} />
                     </div>
                     <div>
-                      <h4 className="text-sm font-black text-white uppercase tracking-widest">BMS MOSFET Thermal</h4>
-                      <p className="text-xs text-slate-500">DS18B20 High-Precision Sensor</p>
+                      <h4 className="text-xs font-black text-white uppercase tracking-widest">BMS MOSFET Thermal</h4>
+                      <p className="text-[10px] text-slate-500 font-medium">DS18B20 High-Precision Sensor</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-3xl font-black text-amber-500">
+                    <span className="text-2xl font-black text-amber-500">
                       {temps.mosfet !== undefined ? Number(temps.mosfet).toFixed(1) : (systemTemp !== 32.5 ? (systemTemp + 10.3).toFixed(1) : '42.8')}°C
                     </span>
                     <div className="flex items-center gap-1.5 justify-end mt-1">
-                      <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
-                      <span className="text-[10px] font-bold text-amber-500/70 uppercase">Warning Threshold</span>
+                      <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></div>
+                      <span className="text-[8px] font-bold text-amber-500/70 uppercase">Warning 65°C</span>
                     </div>
                   </div>
                </div>
+
             </div>
 
           </div>
@@ -585,99 +648,112 @@ const UPSDashboard: React.FC = () => {
       {/* Server Battery Monitor Section */}
       {/* ══════════════════════════════════════════════════ */}
       {serverBattery && (
-        <div className="mt-8">
+        <div className="mt-8 pt-8 border-t border-slate-900/60">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2.5 bg-cyan-500/10 rounded-xl border border-cyan-500/20">
               <Laptop className="text-cyan-400" size={20} />
             </div>
             <div>
-              <h2 className="text-lg font-black text-white tracking-tight">Server Battery Monitor</h2>
-              <p className="text-xs text-slate-500">Baterai laptop server · Update setiap 30 detik</p>
+              <h2 className="text-base font-black text-white tracking-tight">Server Machine Health</h2>
+              <p className="text-xs text-slate-500">Local telemetry for host machine · updates every 30s</p>
             </div>
-            <div className="ml-auto text-[10px] font-mono text-slate-600">{serverBattery.fetchedAt ? new Date(serverBattery.fetchedAt).toLocaleTimeString('id-ID') : ''}</div>
+            <div className="ml-auto text-[10px] font-mono text-slate-500 font-bold">{serverBattery.fetchedAt ? new Date(serverBattery.fetchedAt).toLocaleTimeString('id-ID') : ''}</div>
           </div>
 
           {!serverBattery.hasBattery ? (
-            <div className="p-6 rounded-[2rem] bg-slate-900/50 border border-slate-800 flex items-center gap-4">
-              <AlertTriangle className="text-slate-500" size={24} />
-              <p className="text-slate-400 text-sm">{serverBattery.message ?? "Tidak ada baterai terdeteksi"}</p>
+            <div className="p-6 rounded-3xl bg-slate-900/10 border border-slate-800/40 flex items-center gap-4">
+              <AlertTriangle className="text-slate-500" size={22} />
+              <p className="text-slate-400 text-sm">{serverBattery.message ?? "Host machine does not support battery API (e.g. running on desktop PC)"}</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               
-              {/* Battery Level */}
-              <div className={`col-span-2 md:col-span-1 p-6 rounded-[2rem] bg-slate-900/50 border border-slate-800 shadow-xl ${batteryGlow} relative overflow-hidden`}>
-                <div className="absolute top-0 right-0 p-4 opacity-10"><Battery size={80} /></div>
-                <div className="flex flex-col relative z-10">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Baterai Server</span>
-                  <div className="flex items-baseline gap-1 mb-4">
-                    <span className="text-5xl font-black" style={{ color: batteryColor }}>{batteryPercent}</span>
-                    <span className="text-xl font-bold text-slate-600">%</span>
+              {/* Battery level */}
+              <div className={`p-6 rounded-3xl bg-slate-900/20 border border-slate-800/50 shadow-xl ${batteryGlow} relative overflow-hidden flex flex-col justify-between min-h-[140px]`}>
+                <div className="absolute top-0 right-0 p-4 opacity-[0.02]"><Battery size={80} /></div>
+                <div>
+                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Host Battery</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-4xl font-extrabold" style={{ color: batteryColor }}>{batteryPercent}</span>
+                    <span className="text-sm font-bold text-slate-500">%</span>
                   </div>
-                  {/* Battery Bar */}
-                  <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700 mb-3">
-                    <div className={`h-full rounded-full transition-all duration-1000 ${batteryBgColor}`} style={{ width: `${batteryPercent}%`, boxShadow: `0 0 10px ${batteryColor}` }} />
+                </div>
+                <div>
+                  <div className="h-1.5 w-full bg-slate-950/40 border border-slate-800 rounded-full overflow-hidden p-0.5 mb-3">
+                    <div className={`h-full rounded-full transition-all duration-1000 ${batteryBgColor}`} style={{ width: `${batteryPercent}%`, boxShadow: `0 0 8px ${batteryColor}` }} />
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     {serverBattery.isCharging ? (
-                      <><BatteryCharging size={14} className="text-cyan-400 animate-pulse" /><span className="text-xs text-cyan-400 font-semibold">Mengisi Daya</span></>
+                      <><BatteryCharging size={12} className="text-cyan-400 animate-pulse" /><span className="text-[10px] text-cyan-400 font-bold">CHARGING</span></>
                     ) : (
-                      <><Battery size={14} className="text-slate-500" /><span className="text-xs text-slate-500 font-semibold">Discharging</span></>
+                      <><Battery size={12} className="text-slate-500" /><span className="text-[10px] text-slate-500 font-bold">DISCHARGING</span></>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* AC Status + Time Remaining */}
-              <div className="p-6 rounded-[2rem] bg-slate-900/50 border border-slate-800 shadow-xl flex flex-col justify-between">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Status PLN</span>
-                <div className="flex flex-col gap-4">
+              {/* Status PLN card */}
+              <div className="p-6 rounded-3xl bg-slate-900/20 border border-slate-800/50 shadow-xl flex flex-col justify-between min-h-[140px]">
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Power Source</span>
+                <div>
                   <div className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full shadow-lg ${serverBattery.acConnected ? 'bg-emerald-500 shadow-emerald-500/50 animate-pulse' : 'bg-red-500 shadow-red-500/50'}`} />
+                    <div className={`w-2.5 h-2.5 rounded-full shadow-lg ${serverBattery.acConnected ? 'bg-emerald-500 shadow-emerald-500/40 animate-pulse' : 'bg-rose-500 shadow-rose-500/40 animate-pulse'}`} />
                     <div>
-                      <p className="text-sm font-black text-white">{serverBattery.acConnected ? "PLN Terhubung" : "PLN Terputus!"}</p>
-                      <p className="text-[10px] text-slate-500 uppercase tracking-widest">{serverBattery.acConnected ? "AC Connected" : "On Battery"}</p>
+                      <p className="text-xs font-black text-white">{serverBattery.acConnected ? "AC Utility Line" : "Battery Mode"}</p>
+                      <p className="text-[9px] text-slate-500 uppercase font-semibold">{serverBattery.acConnected ? "Utility Grid Online" : "Running on inverter"}</p>
                     </div>
                   </div>
-                  {serverBattery.timeRemaining && serverBattery.timeRemaining > 0 && (
-                    <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700">
-                      <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Estimasi Sisa</p>
-                      <p className="text-xl font-black text-white font-mono">{Math.floor(serverBattery.timeRemaining / 60)}j {serverBattery.timeRemaining % 60}m</p>
+                </div>
+                <div>
+                  {serverBattery.timeRemaining && serverBattery.timeRemaining > 0 ? (
+                    <div className="p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/50 text-center">
+                      <span className="text-[9px] text-slate-500 uppercase block font-semibold">Remaining Runtime</span>
+                      <span className="text-sm font-extrabold text-white font-mono">{Math.floor(serverBattery.timeRemaining / 60)}h {serverBattery.timeRemaining % 60}m</span>
                     </div>
+                  ) : (
+                    <span className="text-[10px] text-slate-600 font-bold uppercase tracking-wider block">Est. infinite (AC mode)</span>
                   )}
                 </div>
               </div>
 
-              {/* CPU Temp */}
-              <div className="p-6 rounded-[2rem] bg-slate-900/50 border border-slate-800 shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-5"><Thermometer size={80} /></div>
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 block">CPU Temp</span>
-                <div className="flex items-baseline gap-1 mb-2">
-                  <span className={`text-4xl font-black ${cpuTempColor}`}>{serverBattery.cpuTempMax ? Math.round(serverBattery.cpuTempMax) : 'N/A'}</span>
-                  {serverBattery.cpuTempMax && <span className="text-lg font-bold text-slate-600">°C</span>}
+              {/* CPU Temp card */}
+              <div className="p-6 rounded-3xl bg-slate-900/20 border border-slate-800/50 shadow-xl relative overflow-hidden flex flex-col justify-between min-h-[140px]">
+                <div className="absolute top-0 right-0 p-4 opacity-[0.02]"><Thermometer size={80} /></div>
+                <div>
+                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Host Thermal</span>
+                  <div className="flex items-baseline gap-0.5">
+                    <span className={`text-4xl font-extrabold ${cpuTempColor}`}>{serverBattery.cpuTempMax ? Math.round(serverBattery.cpuTempMax) : 'N/A'}</span>
+                    {serverBattery.cpuTempMax && <span className="text-xs font-bold text-slate-500">°C</span>}
+                  </div>
                 </div>
-                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full transition-all ${cpuTemp > 80 ? 'bg-red-500' : cpuTemp > 65 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, (cpuTemp / 100) * 100)}%` }} />
+                <div>
+                  <div className="h-1 w-full bg-slate-950/40 rounded-full overflow-hidden mb-2">
+                    <div className={`h-full rounded-full transition-all ${cpuTemp > 80 ? 'bg-red-500' : cpuTemp > 65 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, (cpuTemp / 100) * 100)}%` }} />
+                  </div>
+                  <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">
+                    {cpuTemp > 80 ? '⚠️ THERMAL THROTTLING' : cpuTemp > 65 ? '⚠️ WARM WORKING TEMP' : '🟢 STABLE SYSTEM TEMP'}
+                  </span>
                 </div>
-                <p className="text-[10px] text-slate-600 mt-2 uppercase tracking-widest">
-                  {cpuTemp > 80 ? '🔴 Overheat!' : cpuTemp > 65 ? '🟡 Hangat' : '🟢 Normal'}
-                </p>
               </div>
 
-              {/* RAM Usage */}
-              <div className="p-6 rounded-[2rem] bg-slate-900/50 border border-slate-800 shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-5"><Cpu size={80} /></div>
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 block">RAM Usage</span>
-                <div className="flex items-baseline gap-1 mb-2">
-                  <span className={`text-4xl font-black ${memColor}`}>{serverBattery.memUsedPercent !== null && serverBattery.memUsedPercent !== undefined ? Math.round(serverBattery.memUsedPercent) : 'N/A'}</span>
-                  {serverBattery.memUsedPercent !== null && <span className="text-lg font-bold text-slate-600">%</span>}
+              {/* RAM Usage card */}
+              <div className="p-6 rounded-3xl bg-slate-900/20 border border-slate-800/50 shadow-xl relative overflow-hidden flex flex-col justify-between min-h-[140px]">
+                <div className="absolute top-0 right-0 p-4 opacity-[0.02]"><Cpu size={80} /></div>
+                <div>
+                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Host RAM</span>
+                  <div className="flex items-baseline gap-0.5">
+                    <span className={`text-4xl font-extrabold ${memColor}`}>{serverBattery.memUsedPercent !== null && serverBattery.memUsedPercent !== undefined ? Math.round(serverBattery.memUsedPercent) : 'N/A'}</span>
+                    {serverBattery.memUsedPercent !== null && <span className="text-xs font-bold text-slate-500">%</span>}
+                  </div>
                 </div>
-                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full transition-all ${memUsed > 85 ? 'bg-red-500' : memUsed > 65 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${memUsed}%` }} />
+                <div>
+                  <div className="h-1 w-full bg-slate-950/40 rounded-full overflow-hidden mb-2">
+                    <div className={`h-full rounded-full transition-all ${memUsed > 85 ? 'bg-red-500' : memUsed > 65 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${memUsed}%` }} />
+                  </div>
+                  <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">
+                    {memUsed > 85 ? '⚠️ MEMORY EXHAUSTION' : memUsed > 65 ? '⚠️ HIGH BUFFER MEMORY' : '🟢 HEALTHY MEMORY BUFFER'}
+                  </span>
                 </div>
-                <p className="text-[10px] text-slate-600 mt-2 uppercase tracking-widest">
-                  {memUsed > 85 ? '🔴 Kritis' : memUsed > 65 ? '🟡 Tinggi' : '🟢 Normal'}
-                </p>
               </div>
 
             </div>
@@ -685,20 +761,20 @@ const UPSDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Footer / Status Bar */}
-      <footer className="mt-12 pt-8 border-t border-slate-800/50 flex justify-between items-center text-slate-500">
+      {/* Footer Status Bar */}
+      <footer className="mt-12 pt-6 border-t border-slate-900/60 flex flex-col md:flex-row justify-between items-center gap-4 text-slate-500">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
-            <div className={`w-1.5 h-1.5 rounded-full ${status === "ONLINE" ? "bg-emerald-500 shadow-[0_0_5px_#10b981]" : "bg-red-500"}`}></div>
-            <span className="text-[10px] font-bold uppercase tracking-widest">UPS Device {status}</span>
+            <div className={`w-1.5 h-1.5 rounded-full ${status === "ONLINE" ? "bg-emerald-500 shadow-[0_0_8px_#10b981]" : "bg-rose-500 shadow-[0_0_8px_#f43f5e]"}`}></div>
+            <span className="text-[9px] font-extrabold uppercase tracking-widest">UPS Device {status}</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className={`w-1.5 h-1.5 rounded-full ${status === "ONLINE" ? "bg-cyan-500 shadow-[0_0_5px_#06b6d4] animate-pulse" : "bg-slate-600"}`}></div>
-            <span className="text-[10px] font-bold uppercase tracking-widest">Data Stream {status === "ONLINE" ? "Active" : "Inactive"}</span>
+            <div className={`w-1.5 h-1.5 rounded-full ${status === "ONLINE" ? "bg-cyan-500 shadow-[0_0_8px_#06b6d4] animate-pulse" : "bg-slate-600"}`}></div>
+            <span className="text-[9px] font-extrabold uppercase tracking-widest">WS Telemetry {status === "ONLINE" ? "STREAMING" : "STANDBY"}</span>
           </div>
         </div>
-        <div className="text-[10px] font-mono tracking-tighter opacity-50 uppercase">
-          DIY UPS MONITORING SYSTEM v1.1.0-LIVE // TOP&apos;S GARDEN ENGINEERING
+        <div className="text-[9px] font-mono tracking-tight opacity-40 uppercase font-semibold">
+          DIY SMART UPS CONTROL HUB v1.2.0-PRO // DESIGNED BY ANTIGRAVITY FOR TOPS GARDEN
         </div>
       </footer>
     </div>
