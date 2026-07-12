@@ -122,6 +122,8 @@ const UPSDashboard: React.FC = () => {
 
   // Settings Modal state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isAddingMode, setIsAddingMode] = useState(false);
+  const [newDeviceId, setNewDeviceId] = useState('');
   const [settingsName, setSettingsName] = useState('');
   const [settingsLocation, setSettingsLocation] = useState('');
   const [settingsCells, setSettingsCells] = useState(true);
@@ -254,6 +256,8 @@ const UPSDashboard: React.FC = () => {
     const activeDevice = devices.find(d => d.id === selectedDeviceId);
     if (!activeDevice) return;
 
+    setIsAddingMode(false);
+    setNewDeviceId('');
     setSettingsName(activeDevice.name);
     setSettingsLocation(activeDevice.location || '');
     
@@ -269,8 +273,28 @@ const UPSDashboard: React.FC = () => {
     setIsSettingsOpen(true);
   };
 
-  const saveSettings = async () => {
+  const deleteDevice = async () => {
     if (!selectedDeviceId) return;
+    if (!confirm("Apakah Anda yakin ingin menghapus perangkat UPS ini?")) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`${API_URL}/api/device/ups/${selectedDeviceId}`, {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        setIsSettingsOpen(false);
+        await fetchDevices(true); // Fetch and select first device
+      } else {
+        alert("Gagal menghapus perangkat: " + await res.text());
+      }
+    } catch (e: any) {
+      alert("Error: " + e.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const saveSettings = async () => {
     setIsSubmitting(true);
     try {
       const updatedConfig: UpsConfig = {
@@ -283,21 +307,48 @@ const UPSDashboard: React.FC = () => {
         }
       };
 
-      const res = await fetch(`${API_URL}/api/device/ups/${selectedDeviceId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: settingsName,
-          location: settingsLocation,
-          config: updatedConfig
-        })
-      });
+      if (isAddingMode) {
+        if (!newDeviceId) {
+          alert("Device ID wajib diisi!");
+          setIsSubmitting(false);
+          return;
+        }
+        const res = await fetch(`${API_URL}/api/device/ups`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: newDeviceId,
+            name: settingsName || `UPS Device (${newDeviceId.substring(0, 6).toUpperCase()})`,
+            location: settingsLocation,
+            config: updatedConfig
+          })
+        });
 
-      if (res.ok) {
-        await fetchDevices(false);
-        setIsSettingsOpen(false);
+        if (res.ok) {
+          setSelectedDeviceId(newDeviceId);
+          await fetchDevices(false);
+          setIsSettingsOpen(false);
+        } else {
+          alert("Gagal mendaftarkan perangkat: " + await res.text());
+        }
       } else {
-        alert("Failed to save settings: " + await res.text());
+        if (!selectedDeviceId) return;
+        const res = await fetch(`${API_URL}/api/device/ups/${selectedDeviceId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: settingsName,
+            location: settingsLocation,
+            config: updatedConfig
+          })
+        });
+
+        if (res.ok) {
+          await fetchDevices(false);
+          setIsSettingsOpen(false);
+        } else {
+          alert("Failed to save settings: " + await res.text());
+        }
       }
     } catch (e: any) {
       alert("Error saving settings: " + e.message);
@@ -895,9 +946,60 @@ const UPSDashboard: React.FC = () => {
                 UPS Hardware Configuration
               </h2>
 
+              {/* Mode toggles */}
+              <div className="flex items-center gap-4 mb-6 border-b border-slate-800 pb-4">
+                <button 
+                  onClick={() => {
+                    setIsAddingMode(false);
+                    const activeDevice = devices.find(d => d.id === selectedDeviceId);
+                    if (activeDevice) {
+                      setSettingsName(activeDevice.name);
+                      setSettingsLocation(activeDevice.location || '');
+                      const config = activeDevice.config || DEFAULT_CONFIG;
+                      setSettingsCells(config.sensors?.cells !== false);
+                      setSettingsVoltageIn(config.sensors?.voltageIn !== false);
+                      setSettingsIna12v(config.sensors?.ina12v !== false);
+                      setSettingsIna5v(config.sensors?.ina5v !== false);
+                      setSettingsTemps(config.sensors?.temperatures || []);
+                    }
+                  }}
+                  className={`pb-1 text-sm font-black transition-all ${!isAddingMode ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                  Edit Device Settings
+                </button>
+                <button 
+                  onClick={() => {
+                    setIsAddingMode(true);
+                    setNewDeviceId('');
+                    setSettingsName('');
+                    setSettingsLocation('');
+                    setSettingsCells(true);
+                    setSettingsVoltageIn(true);
+                    setSettingsIna12v(true);
+                    setSettingsIna5v(true);
+                    setSettingsTemps(DEFAULT_CONFIG.sensors.temperatures);
+                  }}
+                  className={`pb-1 text-sm font-black transition-all ${isAddingMode ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                  Register New UPS
+                </button>
+              </div>
+
               <div className="space-y-6">
                 {/* Meta properties */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {isAddingMode && (
+                    <div className="flex flex-col gap-1.5 md:col-span-2">
+                      <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Device ID (Unique Hardware Key)</label>
+                      <input 
+                        type="text" 
+                        value={newDeviceId}
+                        onChange={(e) => setNewDeviceId(e.target.value.trim())}
+                        className="px-4 py-2.5 bg-slate-950/50 border border-slate-850 focus:border-cyan-500 focus:outline-none rounded-xl text-sm text-white font-mono"
+                        placeholder="e.g. ups_kitchen_01"
+                      />
+                    </div>
+                  )}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Device Name</label>
                     <input 
@@ -1046,7 +1148,18 @@ const UPSDashboard: React.FC = () => {
               </div>
 
               {/* Actions Footer */}
-              <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-slate-850">
+              <div className="flex justify-end items-center gap-3 mt-8 pt-4 border-t border-slate-850">
+                {!isAddingMode && (
+                  <button 
+                    onClick={deleteDevice}
+                    type="button"
+                    disabled={isSubmitting}
+                    className="mr-auto px-4 py-2.5 bg-rose-500/10 border border-rose-500/25 hover:bg-rose-500 hover:text-slate-950 text-rose-400 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Trash2 size={14} />
+                    Delete Device
+                  </button>
+                )}
                 <button 
                   onClick={() => setIsSettingsOpen(false)}
                   className="px-5 py-2.5 bg-slate-900 border border-slate-850 hover:border-slate-700 text-slate-400 hover:text-white rounded-xl font-bold text-xs transition-all cursor-pointer"
@@ -1058,7 +1171,7 @@ const UPSDashboard: React.FC = () => {
                   disabled={isSubmitting}
                   className="px-6 py-2.5 bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 text-slate-950 rounded-xl font-black text-xs shadow-lg shadow-cyan-500/10 flex items-center gap-1.5 transition-all cursor-pointer"
                 >
-                  {isSubmitting ? 'Saving...' : 'Save Configuration'}
+                  {isSubmitting ? 'Saving...' : isAddingMode ? 'Register Device' : 'Save Configuration'}
                 </button>
               </div>
             </motion.div>
