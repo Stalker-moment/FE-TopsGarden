@@ -5,6 +5,12 @@ export interface PzemDevice {
   isActive: boolean;
   shouldReset: boolean;
   lastResetAt: string | null;
+  hasRelay: boolean;
+  relayState: boolean;
+  overcurrentThreshold: number;
+  overcurrentDelay: number;
+  autoReconnect: boolean;
+  reconnectDelay: number;
 }
 
 export interface PzemData {
@@ -39,6 +45,12 @@ export interface PzemWebSocketData {
   name: string;
   location: string;
   lastUpdate: string;
+  hasRelay?: boolean;
+  relayState?: boolean;
+  overcurrentThreshold?: number;
+  overcurrentDelay?: number;
+  autoReconnect?: boolean;
+  reconnectDelay?: number;
   data: {
     voltage: number;
     current: number;

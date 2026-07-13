@@ -30,7 +30,9 @@ import {
   FaExpand,
   FaCompress,
   FaMobileAlt,
-  FaTimes
+  FaTimes,
+  FaPowerOff,
+  FaTimesCircle
 } from "react-icons/fa";
 import { MdElectricBolt } from "react-icons/md";
 import { ApexOptions } from "apexcharts";
@@ -161,6 +163,48 @@ const PowerDashboard: React.FC = () => {
   // Fullscreen modal state
   const [fullscreenChart, setFullscreenChart] = useState<"usage" | "trend" | null>(null);
 
+  // Relay & Overcurrent protection state
+  const [activeRelayState, setActiveRelayState] = useState<boolean>(true);
+  const [activeHasRelay, setActiveHasRelay] = useState<boolean>(false);
+  const [activeThreshold, setActiveThreshold] = useState<number>(10.0);
+  const [activeDelay, setActiveDelay] = useState<number>(0);
+  const [activeAutoReconnect, setActiveAutoReconnect] = useState<boolean>(false);
+  const [activeReconnectDelay, setActiveReconnectDelay] = useState<number>(30);
+
+  useEffect(() => {
+    const dev = devices.find(d => d.id === selectedDeviceId);
+    if (dev) {
+      setActiveHasRelay(dev.hasRelay || false);
+      setActiveRelayState(dev.relayState !== false);
+      setActiveThreshold(dev.overcurrentThreshold !== undefined ? dev.overcurrentThreshold : 10.0);
+      setActiveDelay(dev.overcurrentDelay !== undefined ? dev.overcurrentDelay : 0);
+      setActiveAutoReconnect(dev.autoReconnect || false);
+      setActiveReconnectDelay(dev.reconnectDelay !== undefined ? dev.reconnectDelay : 30);
+    }
+  }, [selectedDeviceId, devices]);
+
+  const toggleRelay = async () => {
+    if (!selectedDeviceId) return;
+    const targetState = !activeRelayState;
+    setActiveRelayState(targetState);
+    try {
+      const res = await fetch(`${API_URL}/api/device/pzem/${selectedDeviceId}/relay`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ relayState: targetState })
+      });
+      if (!res.ok) {
+        setActiveRelayState(!targetState);
+        alert("Failed to toggle relay");
+      } else {
+        fetchDevices();
+      }
+    } catch {
+      setActiveRelayState(!targetState);
+      alert("Error toggling relay");
+    }
+  };
+
   useEffect(() => {
     if (fullscreenChart) {
       document.body.style.overflow = "hidden";
@@ -193,14 +237,22 @@ const PowerDashboard: React.FC = () => {
     if (pendingWsData.current) {
       const message = pendingWsData.current;
       pendingWsData.current = null;
-      
       const current = message.find((d: any) => d.id === selectedDeviceId);
-      if (current?.data) {
-        setRealtimeData({ id: current.id, ...current.data, createdAt: current.lastUpdate || new Date().toISOString() });
-        setStatus("ONLINE");
-        if (current.logs) setRecentLogs(current.logs);
-        if (current.chart) setChartData(current.chart);
-        lastHeavyUpdate.current = Date.now();
+      if (current) {
+        if (current.hasRelay !== undefined) setActiveHasRelay(current.hasRelay);
+        if (current.relayState !== undefined) setActiveRelayState(current.relayState);
+        if (current.overcurrentThreshold !== undefined) setActiveThreshold(current.overcurrentThreshold);
+        if (current.overcurrentDelay !== undefined) setActiveDelay(current.overcurrentDelay);
+        if (current.autoReconnect !== undefined) setActiveAutoReconnect(current.autoReconnect);
+        if (current.reconnectDelay !== undefined) setActiveReconnectDelay(current.reconnectDelay);
+
+        if (current.data) {
+          setRealtimeData({ id: current.id, ...current.data, createdAt: current.lastUpdate || new Date().toISOString() });
+          setStatus("ONLINE");
+          if (current.logs) setRecentLogs(current.logs);
+          if (current.chart) setChartData(current.chart);
+          lastHeavyUpdate.current = Date.now();
+        }
       }
     }
   }, [selectedDeviceId]);
@@ -273,15 +325,24 @@ const PowerDashboard: React.FC = () => {
             pendingWsData.current = message;
           } else {
             const current = message.find((d: any) => d.id === selectedDeviceId);
-            if (current?.data) {
-              setRealtimeData({ id: current.id, ...current.data, createdAt: current.lastUpdate || new Date().toISOString() });
-              setStatus("ONLINE");
-              
-              const now = Date.now();
-              if (now - lastHeavyUpdate.current > 3000) {
-                lastHeavyUpdate.current = now;
-                if (current.logs) setRecentLogs(current.logs);
-                if (current.chart) setChartData(current.chart);
+            if (current) {
+              if (current.hasRelay !== undefined) setActiveHasRelay(current.hasRelay);
+              if (current.relayState !== undefined) setActiveRelayState(current.relayState);
+              if (current.overcurrentThreshold !== undefined) setActiveThreshold(current.overcurrentThreshold);
+              if (current.overcurrentDelay !== undefined) setActiveDelay(current.overcurrentDelay);
+              if (current.autoReconnect !== undefined) setActiveAutoReconnect(current.autoReconnect);
+              if (current.reconnectDelay !== undefined) setActiveReconnectDelay(current.reconnectDelay);
+
+              if (current.data) {
+                setRealtimeData({ id: current.id, ...current.data, createdAt: current.lastUpdate || new Date().toISOString() });
+                setStatus("ONLINE");
+                
+                const now = Date.now();
+                if (now - lastHeavyUpdate.current > 3000) {
+                  lastHeavyUpdate.current = now;
+                  if (current.logs) setRecentLogs(current.logs);
+                  if (current.chart) setChartData(current.chart);
+                }
               }
             }
           }
@@ -1122,6 +1183,88 @@ const PowerDashboard: React.FC = () => {
           <CardMetric title="Voltage" value={displayData.voltage.toFixed(1)} unit="V" icon={<FaPlug />} color="text-blue-500" subValue={`Freq: ${displayData.frequency.toFixed(1)} Hz`} />
           <CardMetric title="Current" value={displayData.current.toFixed(2)} unit="A" icon={<FaTachometerAlt />} color="text-red-500" />
         </div>
+
+        {/* Relay Protection Widget (If Active Device has Relay) */}
+        {activeHasRelay && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`mb-8 p-5 rounded-[1.5rem] md:rounded-[2rem] border backdrop-blur-xl shadow-xl relative overflow-hidden transition-all duration-500 ${
+              !activeRelayState
+                ? 'bg-red-500/10 border-red-500/30 dark:border-red-500/40 shadow-red-500/5'
+                : 'bg-white/70 dark:bg-gray-800/60 border-white/50 dark:border-gray-700/50'
+            }`}
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-500/5 pointer-events-none"></div>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-10">
+              
+              {/* Left Side: Status Info */}
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-2xl flex items-center justify-center text-xl shadow-md transition-all duration-500 ${
+                  !activeRelayState
+                    ? 'bg-red-500 text-white animate-pulse shadow-red-500/30'
+                    : 'bg-emerald-500 text-white shadow-emerald-500/20'
+                }`}>
+                  {activeRelayState ? <FaPlug /> : <FaTimesCircle />}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest leading-none block">Booster Pump Safety Relay</span>
+                    {!activeRelayState && (
+                      <span className="text-[8px] font-extrabold px-1.5 py-0.5 rounded-md bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 animate-pulse">TRIPPED!</span>
+                    )}
+                  </div>
+                  <h4 className="text-xl font-black text-gray-850 dark:text-white mt-1.5 leading-none">
+                    Status: <span className={activeRelayState ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}>
+                      {activeRelayState ? 'Connected (ON)' : 'Disconnected (OFF/Trip)'}
+                    </span>
+                  </h4>
+                  <p className="text-xs text-gray-550 dark:text-gray-400 mt-1">
+                    {!activeRelayState 
+                      ? 'Relay terputus otomatis karena kelebihan beban arus atau dimatikan manual.' 
+                      : `Sirkuit aman. Batas: ${activeThreshold.toFixed(1)}A ${activeDelay > 0 ? `(Tunda ${activeDelay}s)` : '(Instan)'}. Auto-Reconnect: ${activeAutoReconnect ? `Aktif (${activeReconnectDelay}s)` : 'Nonaktif'}.`
+                    }
+                  </p>
+                </div>
+              </div>
+
+              {/* Right Side: Switch controls */}
+              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto shrink-0">
+                {/* Current Threshold Badge */}
+                <div className="bg-white/80 dark:bg-gray-850/80 border border-gray-200 dark:border-gray-700 px-3 py-2 rounded-xl text-center shadow-inner flex flex-col justify-center min-w-[80px]">
+                  <span className="text-[7px] text-gray-450 dark:text-gray-500 uppercase tracking-wider block font-bold mb-0.5">Threshold</span>
+                  <span className="text-sm font-mono font-black text-gray-850 dark:text-white">{activeThreshold.toFixed(1)} <span className="text-xs text-gray-400">A</span></span>
+                </div>
+
+                {/* Delay Badge */}
+                <div className="bg-white/80 dark:bg-gray-850/80 border border-gray-200 dark:border-gray-700 px-3 py-2 rounded-xl text-center shadow-inner flex flex-col justify-center min-w-[85px]">
+                  <span className="text-[7px] text-gray-450 dark:text-gray-500 uppercase tracking-wider block font-bold mb-0.5">Trip Delay</span>
+                  <span className="text-sm font-mono font-black text-gray-850 dark:text-white">{activeDelay === 0 ? "Instan" : `${activeDelay}s`}</span>
+                </div>
+
+                {/* Auto Reconnect Cooldown Badge */}
+                <div className="bg-white/80 dark:bg-gray-850/80 border border-gray-200 dark:border-gray-700 px-3 py-2 rounded-xl text-center shadow-inner flex flex-col justify-center min-w-[85px]">
+                  <span className="text-[7px] text-gray-450 dark:text-gray-500 uppercase tracking-wider block font-bold mb-0.5">Auto-Rec</span>
+                  <span className="text-sm font-mono font-black text-gray-850 dark:text-white">{activeAutoReconnect ? `${activeReconnectDelay}s` : "OFF"}</span>
+                </div>
+
+                {/* Control Action Button */}
+                <button
+                  onClick={toggleRelay}
+                  className={`flex-1 md:flex-none px-6 py-3 rounded-xl font-extrabold text-xs shadow-lg transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer border active:scale-95 ${
+                    !activeRelayState
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 shadow-emerald-600/20'
+                      : 'bg-red-600 hover:bg-red-500 text-white border-red-400 shadow-red-600/20'
+                  }`}
+                >
+                  <FaPowerOff size={14} />
+                  <span>{activeRelayState ? 'Cutoff Circuit (OFF)' : 'Reset & Reconnect (ON)'}</span>
+                </button>
+              </div>
+
+            </div>
+          </motion.div>
+        )}
 
         {/* Load Bar */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
