@@ -38,6 +38,7 @@ export interface PzemLog {
   frequency: number;
   pf: number;
   createdAt: string;
+  deviceName?: string;
 }
 
 export interface PzemWebSocketData {
@@ -163,6 +164,8 @@ export interface PowerOutageLogItem {
   lastVoltage: number;
   status: "BERLANGSUNG" | "SELESAI";
   createdAt: string;
+  deviceName?: string;
+  location?: string;
 }
 
 export interface PowerOutageLogsResponse {

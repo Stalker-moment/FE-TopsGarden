@@ -283,7 +283,7 @@ const PowerDashboard: React.FC = () => {
       if (res.ok) {
         const data: PzemDevice[] = await res.json();
         setDevices(data);
-        if (data.length > 0 && !selectedDeviceId) setSelectedDeviceId(data[0].id);
+        if (data.length > 0 && !selectedDeviceId) setSelectedDeviceId("all");
       }
     } catch (error) { console.error("Failed to fetch devices:", error); }
   }, [selectedDeviceId]);
@@ -305,9 +305,21 @@ const PowerDashboard: React.FC = () => {
         if (logsRes.ok) setRecentLogs(await logsRes.json());
         if (latestRes.ok) {
           const j = await latestRes.json();
-          if (j.latest) { setRealtimeData(j.latest); setStatus(j.status); }
+          if (j.latest) { 
+            setRealtimeData(j.latest); 
+            setStatus(j.status); 
+          } else {
+            setRealtimeData(null);
+            setStatus("OFFLINE");
+          }
         }
-      } catch (error) { console.error("Failed to fetch history:", error); }
+      } catch (error) { 
+        console.error("Failed to fetch history:", error); 
+        setRealtimeData(null);
+        setRecentLogs([]);
+        setChartData([]);
+        setStatus("OFFLINE");
+      }
     };
     fetchHistory();
   }, [selectedDeviceId]);
@@ -324,24 +336,65 @@ const PowerDashboard: React.FC = () => {
           if (isHoveringChart.current) {
             pendingWsData.current = message;
           } else {
-            const current = message.find((d: any) => d.id === selectedDeviceId);
-            if (current) {
-              if (current.hasRelay !== undefined) setActiveHasRelay(current.hasRelay);
-              if (current.relayState !== undefined) setActiveRelayState(current.relayState);
-              if (current.overcurrentThreshold !== undefined) setActiveThreshold(current.overcurrentThreshold);
-              if (current.overcurrentDelay !== undefined) setActiveDelay(current.overcurrentDelay);
-              if (current.autoReconnect !== undefined) setActiveAutoReconnect(current.autoReconnect);
-              if (current.reconnectDelay !== undefined) setActiveReconnectDelay(current.reconnectDelay);
+            if (selectedDeviceId === "all") {
+              const activeDevs = message.filter((d: any) => d.isActive !== false && d.data);
+              if (activeDevs.length > 0) {
+                const totalEnergy = activeDevs.reduce((sum: number, d: any) => sum + (d.data.energy || 0), 0);
+                const totalPower = activeDevs.reduce((sum: number, d: any) => sum + (d.data.power || 0), 0);
+                const avgVoltage = activeDevs.reduce((sum: number, d: any) => sum + (d.data.voltage || 0), 0) / activeDevs.length;
+                const totalCurrent = activeDevs.reduce((sum: number, d: any) => sum + (d.data.current || 0), 0);
+                const avgFreq = activeDevs.reduce((sum: number, d: any) => sum + (d.data.frequency || 0), 0) / activeDevs.length;
+                const avgPf = activeDevs.reduce((sum: number, d: any) => sum + (d.data.pf || 0), 0) / activeDevs.length;
 
-              if (current.data) {
-                setRealtimeData({ id: current.id, ...current.data, createdAt: current.lastUpdate || new Date().toISOString() });
+                setRealtimeData({
+                  id: "all",
+                  voltage: avgVoltage,
+                  current: totalCurrent,
+                  power: totalPower,
+                  energy: totalEnergy,
+                  frequency: avgFreq,
+                  pf: avgPf,
+                  createdAt: new Date().toISOString()
+                });
                 setStatus("ONLINE");
-                
+
                 const now = Date.now();
                 if (now - lastHeavyUpdate.current > 3000) {
                   lastHeavyUpdate.current = now;
-                  if (current.logs) setRecentLogs(current.logs);
-                  if (current.chart) setChartData(current.chart);
+                  fetch(`${API_URL}/api/device/pzem/all/chart`).then(r => r.json()).then(setChartData).catch(() => {});
+                  fetch(`${API_URL}/api/device/pzem/all/logs?limit=10`).then(r => r.json()).then(setRecentLogs).catch(() => {});
+                }
+              } else {
+                setRealtimeData(null);
+                setStatus("OFFLINE");
+                setRecentLogs([]);
+                setChartData([]);
+              }
+            } else {
+              const current = message.find((d: any) => d.id === selectedDeviceId);
+              if (current) {
+                if (current.hasRelay !== undefined) setActiveHasRelay(current.hasRelay);
+                if (current.relayState !== undefined) setActiveRelayState(current.relayState);
+                if (current.overcurrentThreshold !== undefined) setActiveThreshold(current.overcurrentThreshold);
+                if (current.overcurrentDelay !== undefined) setActiveDelay(current.overcurrentDelay);
+                if (current.autoReconnect !== undefined) setActiveAutoReconnect(current.autoReconnect);
+                if (current.reconnectDelay !== undefined) setActiveReconnectDelay(current.reconnectDelay);
+
+                if (current.data) {
+                  setRealtimeData({ id: current.id, ...current.data, createdAt: current.lastUpdate || new Date().toISOString() });
+                  setStatus("ONLINE");
+                  
+                  const now = Date.now();
+                  if (now - lastHeavyUpdate.current > 3000) {
+                    lastHeavyUpdate.current = now;
+                    if (current.logs) setRecentLogs(current.logs);
+                    if (current.chart) setChartData(current.chart);
+                  }
+                } else {
+                  setRealtimeData(null);
+                  setStatus("OFFLINE");
+                  setRecentLogs([]);
+                  setChartData([]);
                 }
               }
             }
@@ -1149,6 +1202,7 @@ const PowerDashboard: React.FC = () => {
                 value={selectedDeviceId || ""}
                 onChange={(e) => setSelectedDeviceId(e.target.value)}
               >
+                <option value="all">Semua Alat (All Devices)</option>
                 {devices.map(dev => (
                   <option key={dev.id} value={dev.id}>{dev.name} ({dev.location})</option>
                 ))}
@@ -1163,8 +1217,16 @@ const PowerDashboard: React.FC = () => {
             </div>
             
             <div className="flex items-center gap-2">
-              <button onClick={() => setIsResetConfirmOpen(true)} title="Reset Energy (kWh)"
-                className="p-2.5 bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/40 transition-colors">
+              <button 
+                disabled={selectedDeviceId === "all"}
+                onClick={() => setIsResetConfirmOpen(true)} 
+                title={selectedDeviceId === "all" ? "Pilih alat spesifik untuk mereset kWh" : "Reset Energy (kWh)"}
+                className={`p-2.5 rounded-lg transition-colors ${
+                  selectedDeviceId === "all"
+                    ? "bg-gray-100 dark:bg-gray-800/40 text-gray-400 dark:text-gray-600 cursor-not-allowed"
+                    : "bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/40"
+                }`}
+              >
                 <FaTrash size={14} />
               </button>
               <button onClick={() => setIsSettingsOpen(true)} title="Manage Sensors"
@@ -1216,7 +1278,7 @@ const PowerDashboard: React.FC = () => {
                       <span className="text-[8px] font-extrabold px-1.5 py-0.5 rounded-md bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 animate-pulse">TRIPPED!</span>
                     )}
                   </div>
-                  <h4 className="text-xl font-black text-gray-850 dark:text-white mt-1.5 leading-none">
+                  <h4 className="text-xl font-black text-gray-800 dark:text-white mt-1.5 leading-none">
                     Status: <span className={activeRelayState ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}>
                       {activeRelayState ? 'Connected (ON)' : 'Disconnected (OFF/Trip)'}
                     </span>
@@ -1233,21 +1295,21 @@ const PowerDashboard: React.FC = () => {
               {/* Right Side: Switch controls */}
               <div className="flex flex-wrap items-center gap-2 w-full md:w-auto shrink-0">
                 {/* Current Threshold Badge */}
-                <div className="bg-white/80 dark:bg-gray-850/80 border border-gray-200 dark:border-gray-700 px-3 py-2 rounded-xl text-center shadow-inner flex flex-col justify-center min-w-[80px]">
-                  <span className="text-[7px] text-gray-450 dark:text-gray-500 uppercase tracking-wider block font-bold mb-0.5">Threshold</span>
-                  <span className="text-sm font-mono font-black text-gray-850 dark:text-white">{activeThreshold.toFixed(1)} <span className="text-xs text-gray-400">A</span></span>
+                <div className="bg-white/80 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 px-3 py-2 rounded-xl text-center shadow-inner flex flex-col justify-center min-w-[80px]">
+                  <span className="text-[7px] text-gray-455 dark:text-gray-500 uppercase tracking-wider block font-bold mb-0.5">Threshold</span>
+                  <span className="text-sm font-mono font-black text-gray-800 dark:text-white">{activeThreshold.toFixed(1)} <span className="text-xs text-gray-400">A</span></span>
                 </div>
 
                 {/* Delay Badge */}
-                <div className="bg-white/80 dark:bg-gray-850/80 border border-gray-200 dark:border-gray-700 px-3 py-2 rounded-xl text-center shadow-inner flex flex-col justify-center min-w-[85px]">
-                  <span className="text-[7px] text-gray-450 dark:text-gray-500 uppercase tracking-wider block font-bold mb-0.5">Trip Delay</span>
-                  <span className="text-sm font-mono font-black text-gray-850 dark:text-white">{activeDelay === 0 ? "Instan" : `${activeDelay}s`}</span>
+                <div className="bg-white/80 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 px-3 py-2 rounded-xl text-center shadow-inner flex flex-col justify-center min-w-[85px]">
+                  <span className="text-[7px] text-gray-455 dark:text-gray-500 uppercase tracking-wider block font-bold mb-0.5">Trip Delay</span>
+                  <span className="text-sm font-mono font-black text-gray-800 dark:text-white">{activeDelay === 0 ? "Instan" : `${activeDelay}s`}</span>
                 </div>
 
                 {/* Auto Reconnect Cooldown Badge */}
-                <div className="bg-white/80 dark:bg-gray-850/80 border border-gray-200 dark:border-gray-700 px-3 py-2 rounded-xl text-center shadow-inner flex flex-col justify-center min-w-[85px]">
-                  <span className="text-[7px] text-gray-450 dark:text-gray-500 uppercase tracking-wider block font-bold mb-0.5">Auto-Rec</span>
-                  <span className="text-sm font-mono font-black text-gray-850 dark:text-white">{activeAutoReconnect ? `${activeReconnectDelay}s` : "OFF"}</span>
+                <div className="bg-white/80 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 px-3 py-2 rounded-xl text-center shadow-inner flex flex-col justify-center min-w-[85px]">
+                  <span className="text-[7px] text-gray-455 dark:text-gray-500 uppercase tracking-wider block font-bold mb-0.5">Auto-Rec</span>
+                  <span className="text-sm font-mono font-black text-gray-800 dark:text-white">{activeAutoReconnect ? `${activeReconnectDelay}s` : "OFF"}</span>
                 </div>
 
                 {/* Control Action Button */}
@@ -2283,6 +2345,7 @@ const PowerDashboard: React.FC = () => {
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-gray-50/80 dark:bg-gray-900/40 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-widest">
+                  {selectedDeviceId === "all" && <th className="py-3 px-5 font-bold">Device</th>}
                   <th className="py-3 px-5 font-bold">Time</th>
                   <th className="py-3 px-5 font-bold">Voltage</th>
                   <th className="py-3 px-5 font-bold">Current</th>
@@ -2296,6 +2359,11 @@ const PowerDashboard: React.FC = () => {
                   const isMidPower = log.power > 30;
                   return (
                     <tr key={log.id} className={`group transition-colors duration-150 ${idx % 2 === 0 ? 'bg-white/40 dark:bg-transparent' : 'bg-gray-50/60 dark:bg-gray-900/20'} hover:bg-blue-50/60 dark:hover:bg-blue-900/10`}>
+                      {selectedDeviceId === "all" && (
+                        <td className="py-3.5 px-5 font-semibold text-gray-600 dark:text-gray-400 text-xs">
+                          {log.deviceName || "Unknown"}
+                        </td>
+                      )}
                       <td className="py-3.5 px-5"><span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-lg">{new Date(log.createdAt).toLocaleString('id-ID', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span></td>
                       <td className="py-3.5 px-5"><span className="inline-flex items-center gap-1.5 font-semibold text-blue-700 dark:text-blue-300"><span className="w-1.5 h-1.5 rounded-full bg-blue-500"/>{log.voltage.toFixed(1)}<span className="text-xs text-gray-400">V</span></span></td>
                       <td className="py-3.5 px-5"><span className="inline-flex items-center gap-1.5 font-semibold text-red-600 dark:text-red-400"><span className="w-1.5 h-1.5 rounded-full bg-red-500"/>{log.current.toFixed(2)}<span className="text-xs text-gray-400">A</span></span></td>
@@ -2304,7 +2372,7 @@ const PowerDashboard: React.FC = () => {
                     </tr>
                   );
                 }) : (
-                  <tr><td colSpan={5} className="py-12 text-center"><div className="flex flex-col items-center gap-2 text-gray-400 dark:text-gray-600"><FaHistory size={28} className="opacity-30"/><p className="text-sm font-medium">No logs available yet</p><p className="text-xs">Logs will appear when the device sends data</p></div></td></tr>
+                  <tr><td colSpan={selectedDeviceId === "all" ? 6 : 5} className="py-12 text-center"><div className="flex flex-col items-center gap-2 text-gray-400 dark:text-gray-600"><FaHistory size={28} className="opacity-30"/><p className="text-sm font-medium">No logs available yet</p><p className="text-xs">Logs will appear when the device sends data</p></div></td></tr>
                 )}
               </tbody>
             </table>

@@ -413,7 +413,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                           <div className="flex items-center gap-4">
                             <input 
                               type="range"
-                              min="5"
+                              min="1"
                               max="120"
                               step="1"
                               value={formData.reconnectDelay}
@@ -423,22 +423,22 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                             <div className="flex items-center gap-1 shrink-0">
                               <input 
                                 type="number"
-                                min="5"
+                                min="1"
                                 max="120"
                                 step="1"
                                 value={formData.reconnectDelay}
                                 onChange={e => {
                                   let val = parseInt(e.target.value);
                                   if (val > 120) val = 120;
-                                  setFormData({...formData, reconnectDelay: isNaN(val) ? 5 : val});
+                                  setFormData({...formData, reconnectDelay: isNaN(val) ? 1 : val});
                                 }}
                                 className="w-20 px-2 py-1.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-xl text-xs font-mono font-bold text-blue-600 dark:text-blue-400 text-center shadow-sm"
                               />
-                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 font-mono">detik</span>
+                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 font-mono">detik</span>
                             </div>
                           </div>
-                          <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-500 font-semibold font-mono">
-                            <span>Min: 5s</span>
+                          <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-550 font-semibold font-mono">
+                            <span>Min: 1s</span>
                             <span>Max: 120s</span>
                           </div>
                         </div>
@@ -626,7 +626,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                           <div className="flex items-center gap-4">
                             <input 
                               type="range"
-                              min="5"
+                              min="1"
                               max="120"
                               step="1"
                               value={formData.reconnectDelay}
@@ -636,14 +636,14 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                             <div className="flex items-center gap-1 shrink-0">
                               <input 
                                 type="number"
-                                min="5"
+                                min="1"
                                 max="120"
                                 step="1"
                                 value={formData.reconnectDelay}
                                 onChange={e => {
                                   let val = parseInt(e.target.value);
                                   if (val > 120) val = 120;
-                                  setFormData({...formData, reconnectDelay: isNaN(val) ? 5 : val});
+                                  setFormData({...formData, reconnectDelay: isNaN(val) ? 1 : val});
                                 }}
                                 className="w-20 px-2 py-1.5 bg-white dark:bg-gray-900 border border-yellow-200 dark:border-yellow-900/30 focus:border-yellow-500 focus:outline-none focus:ring-1 focus:ring-yellow-500 rounded-xl text-xs font-mono font-bold text-yellow-600 dark:text-yellow-500 text-center shadow-sm"
                               />
@@ -651,7 +651,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                             </div>
                           </div>
                           <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-500 font-semibold font-mono">
-                            <span>Min: 5s</span>
+                            <span>Min: 1s</span>
                             <span>Max: 120s</span>
                           </div>
                         </div>
