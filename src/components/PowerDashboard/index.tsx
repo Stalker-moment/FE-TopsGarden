@@ -312,37 +312,18 @@ const PowerDashboard: React.FC = () => {
   useEffect(() => { fetchDevices(); }, [fetchDevices]);
 
 
-  // 2. Fetch Initial Data when device selected
+  // 2. Initial state reset when device selection changes
+  // (WS first broadcast will populate chart/logs/data automatically)
   useEffect(() => {
     if (!selectedDeviceId) return;
-    const fetchHistory = async () => {
-      try {
-        const [chartRes, logsRes, latestRes] = await Promise.all([
-          fetch(`${API_URL}/api/device/pzem/${selectedDeviceId}/chart`),
-          fetch(`${API_URL}/api/device/pzem/${selectedDeviceId}/logs?limit=10`),
-          fetch(`${API_URL}/api/device/pzem/${selectedDeviceId}/latest`),
-        ]);
-        if (chartRes.ok) setChartData(await chartRes.json());
-        if (logsRes.ok) setRecentLogs(await logsRes.json());
-        if (latestRes.ok) {
-          const j = await latestRes.json();
-          if (j.latest) { 
-            setRealtimeData(j.latest); 
-            setStatus(j.status); 
-          } else {
-            setRealtimeData(null);
-            setStatus("OFFLINE");
-          }
-        }
-      } catch (error) { 
-        console.error("Failed to fetch history:", error); 
-        setRealtimeData(null);
-        setRecentLogs([]);
-        setChartData([]);
-        setStatus("OFFLINE");
-      }
-    };
-    fetchHistory();
+    setRealtimeData(null);
+    setStatus("OFFLINE");
+    setRecentLogs([]);
+    setChartData([]);
+    setOutageLogs([]);
+    setOutageTotal(0);
+    setDeviceIsOnline(false);
+    setDeviceLastUpdateStr(null);
   }, [selectedDeviceId]);
 
   // 3. WebSocket Connection
@@ -352,7 +333,13 @@ const PowerDashboard: React.FC = () => {
     wsRef.current = ws;
     ws.onmessage = (event) => {
       try {
-        const message = JSON.parse(event.data);
+        const payload = JSON.parse(event.data);
+        // Support both old array shape and new { devices, serverBattery } shape
+        const message: any[] = Array.isArray(payload) ? payload : (payload.devices ?? []);
+        const serverBatteryPayload = payload.serverBattery ?? null;
+
+        if (serverBatteryPayload) setServerBattery(serverBatteryPayload);
+
         if (Array.isArray(message)) {
           if (isHoveringChart.current) {
             pendingWsData.current = message;
@@ -360,12 +347,10 @@ const PowerDashboard: React.FC = () => {
             if (selectedDeviceId === "all") {
               // Build per-device realtime map for split view
               const newMap: Record<string, { data: any; isOnline: boolean }> = {};
-              const twoMinAgo = Date.now() - 2 * 60 * 1000;
               message.forEach((d: any) => {
-                const lastMs = d.lastUpdate ? new Date(d.lastUpdate).getTime() : 0;
                 newMap[d.id] = {
                   data: d.data || null,
-                  isOnline: !!(d.data && lastMs > twoMinAgo)
+                  isOnline: d.isOnline === true
                 };
               });
               setAllDevicesRealtimeMap(newMap);
@@ -392,12 +377,11 @@ const PowerDashboard: React.FC = () => {
                 setStatus("ONLINE");
                 setDeviceIsOnline(true);
 
-                const now = Date.now();
-                if (now - lastHeavyUpdate.current > 3000) {
-                  lastHeavyUpdate.current = now;
-                  fetch(`${API_URL}/api/device/pzem/all/chart`).then(r => r.json()).then(setChartData).catch(() => {});
-                  fetch(`${API_URL}/api/device/pzem/all/logs?limit=10`).then(r => r.json()).then(setRecentLogs).catch(() => {});
-                }
+                // Use aggregated logs/chart from first available active device (for "all" view)
+                const firstWithLogs = activeDevs.find((d: any) => d.logs);
+                if (firstWithLogs?.logs) setRecentLogs(firstWithLogs.logs);
+                const firstWithChart = activeDevs.find((d: any) => d.chart);
+                if (firstWithChart?.chart) setChartData(firstWithChart.chart);
               } else {
                 setRealtimeData(null);
                 setStatus("OFFLINE");
@@ -417,19 +401,18 @@ const PowerDashboard: React.FC = () => {
                 if (current.data) {
                   setRealtimeData({ id: current.id, ...current.data, createdAt: current.lastUpdate || new Date().toISOString() });
                   setStatus("ONLINE");
-                  // Read isOnline and lastUpdate from backend payload
                   setDeviceIsOnline(current.isOnline === true);
                   if (current.lastUpdate) {
                     setDeviceLastUpdateStr(new Date(current.lastUpdate).toLocaleTimeString('id-ID', {
                       timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit'
                     }));
                   }
-                  
-                  const now = Date.now();
-                  if (now - lastHeavyUpdate.current > 3000) {
-                    lastHeavyUpdate.current = now;
-                    if (current.logs) setRecentLogs(current.logs);
-                    if (current.chart) setChartData(current.chart);
+                  // Logs, chart, outage logs all come directly from WS — no HTTP refetch needed
+                  if (current.logs) setRecentLogs(current.logs);
+                  if (current.chart) setChartData(current.chart);
+                  if (current.outageLogs) {
+                    setOutageLogs(current.outageLogs);
+                    setOutageTotal(current.outageTotal ?? 0);
                   }
                 } else {
                   setRealtimeData(null);
@@ -478,9 +461,9 @@ const PowerDashboard: React.FC = () => {
   useEffect(() => { fetchUsageData(); }, [fetchUsageData]);
 
 
-  // 5. Fetch Outage Logs
+  // 5. Fetch Outage Logs (only on manual page change, data auto-refreshes via WS)
   const fetchOutageLogs = useCallback(async () => {
-    if (!selectedDeviceId) return;
+    if (!selectedDeviceId || outagePage === 1) return; // page 1 comes from WS
     setOutageLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/device/pzem/${selectedDeviceId}/outage-logs?limit=10&page=${outagePage}`);
@@ -495,26 +478,7 @@ const PowerDashboard: React.FC = () => {
 
   useEffect(() => { fetchOutageLogs(); }, [fetchOutageLogs]);
 
-  // Auto-refresh outage logs every 60s (realtime matlis detection)
-  useEffect(() => {
-    if (!selectedDeviceId) return;
-    const interval = setInterval(fetchOutageLogs, 60000);
-    return () => clearInterval(interval);
-  }, [fetchOutageLogs, selectedDeviceId]);
-
-  // 6. Fetch Server Battery (poll every 30s)
-  const fetchServerBattery = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_URL}/api/device/server-battery`);
-      if (res.ok) setServerBattery(await res.json());
-    } catch { /* silent */ }
-  }, []);
-
-  useEffect(() => {
-    fetchServerBattery();
-    const interval = setInterval(fetchServerBattery, 30000);
-    return () => clearInterval(interval);
-  }, [fetchServerBattery]);
+  // 6. Fetch Server Battery — removed, now comes via WS payload
 
   // 7. Reset Energy Handler
   const confirmResetEnergy = async () => {
