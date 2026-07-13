@@ -123,6 +123,233 @@ const UPSDashboard: React.FC = () => {
   const [newTempId, setNewTempId] = useState('');
   const [newTempLabel, setNewTempLabel] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [settingsActiveTab, setSettingsActiveTab] = useState<"config" | "code">("config");
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    alert("Arduino code copied to clipboard!");
+  };
+
+  const getWiringGuide = () => {
+    const lines: string[] = [];
+    lines.push("==========================================================");
+    lines.push("           WIRING GUIDE FOR THIS UPS CONFIGURATION        ");
+    lines.push("==========================================================");
+    lines.push("");
+    
+    if (settingsVoltageIn) {
+      lines.push("  [1] PLN Outage Detector Connection:");
+      lines.push("      - Connect PLN 12V adapter output to Optocoupler input.");
+      lines.push("      - Optocoupler Output pin -> ESP32 GPIO 35.");
+      lines.push("      - (Ensures ESP32 is isolated from adapter spikes; drops LOW when PLN is OUT)");
+      lines.push("");
+    }
+    
+    if (settingsCells) {
+      lines.push("  [2] Battery 3S Voltage Monitoring:");
+      lines.push("      - Connect Battery Pack positive (12.6V max) to Resistor Divider input.");
+      lines.push("      - Divider formula: 10k Ohm (to Battery V+) & 4.7k Ohm (to GND).");
+      lines.push("      - Connect junction point between resistors to ESP32 GPIO 34.");
+      lines.push("      - (Scales 12.6V max down to safely fit under 3.3V ADC limit)");
+      lines.push("");
+    }
+    
+    if (settingsIna12v || settingsIna5v) {
+      lines.push("  [3] I2C Sensor Bus (INA219 Current/Voltage Sensors):");
+      lines.push("      - Connect ESP32 Pin 21 (SDA) to INA219 SDA pin (parallel).");
+      lines.push("      - Connect ESP32 Pin 22 (SCL) to INA219 SCL pin (parallel).");
+      lines.push("      - Connect all sensor VCC pins to ESP32 3.3V, and GND to GND.");
+      if (settingsIna12v) {
+        lines.push("      * INA219 #1 (12V Bus): Address 0x40 (Bridge A0/A1 left open/default)");
+      }
+      if (settingsIna5v) {
+        lines.push("      * INA219 #2 (5V Bus): Address 0x41 (Solder Bridge A0 closed, A1 open)");
+      }
+      lines.push("");
+    }
+
+    if (settingsTemps.length > 0) {
+      lines.push("  [4] DS18B20 OneWire Temperature Sensors:");
+      lines.push("      - Connect all sensor VCC pins to 3.3V, and all GND pins to GND.");
+      lines.push("      - Connect all DS18B20 Data wires together in parallel to ESP32 GPIO 4.");
+      lines.push("      - Add a 4.7k Ohm Resistor between the Data wire and 3.3V (mandatory pull-up).");
+      lines.push("      - DallasTemperature reading indices map to:");
+      settingsTemps.forEach((t, i) => {
+        lines.push(`        * Index ${i} -> ${t.label} (ID: ${t.id})`);
+      });
+      lines.push("");
+    }
+    
+    return lines.join("\n");
+  };
+
+  const getArduinoCode = (deviceIdVal: string) => {
+    const devId = deviceIdVal || newDeviceId || selectedDeviceId || "ups_test_device";
+    
+    let code = `/**
+ * DIY Smart UPS - ESP32 Arduino Ingestion Firmware
+ * Generated dynamically for: ${settingsName || devId}
+ * 
+ * Dependencies:
+ *   - ArduinoJson (by Benoit Blanchon)
+ *   - Adafruit INA219 (if using INA current sensors)
+ *   - OneWire & DallasTemperature (if using DS18B20 temps)
+ */
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
+#include <Wire.h>
+
+// Wi-Fi Credentials
+const char* ssid = "TierKun_IoT";
+const char* password = "Tier010707";
+
+// API Ingestion Settings
+const char* apiUrl = "http://192.168.100.149:2055/api/device/ups/data";
+const char* deviceId = "${devId}";
+
+`;
+
+    if (settingsIna12v || settingsIna5v) {
+      code += `// INA219 Current Monitors\n#include <Adafruit_INA219.h>\n`;
+      if (settingsIna12v) code += `Adafruit_INA219 ina12v(0x40);\n`;
+      if (settingsIna5v) code += `Adafruit_INA219 ina5v(0x41);\n`;
+      code += `\n`;
+    }
+
+    if (settingsTemps.length > 0) {
+      code += `// Temperature Sensors (DS18B20 OneWire)\n#include <OneWire.h>\n#include <DallasTemperature.h>\n`;
+      code += `#define ONE_WIRE_BUS 4\n`;
+      code += `OneWire oneWire(ONE_WIRE_BUS);\n`;
+      code += `DallasTemperature sensors(&oneWire);\n\n`;
+    }
+
+    if (settingsCells) {
+      code += `// Battery Pin\n#define CELLS_PIN 34\n`;
+    }
+    if (settingsVoltageIn) {
+      code += `// PLN Detector Pin\n#define VOLTAGE_IN_PIN 35\n`;
+    }
+    code += `\n`;
+
+    code += `void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  
+  // Connect Wi-Fi
+  Serial.print("Connecting to Wi-Fi");
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\\nWiFi Connected!");
+  
+  // Start I2C Bus
+  Wire.begin(21, 22); // SDA Pin 21, SCL Pin 22
+  
+`;
+
+    if (settingsIna12v) {
+      code += `  if (!ina12v.begin()) {\n    Serial.println("Warning: Could not find INA219 12V bus sensor!");\n  }\n`;
+    }
+    if (settingsIna5v) {
+      code += `  if (!ina5v.begin()) {\n    Serial.println("Warning: Could not find INA219 5V bus sensor!");\n  }\n`;
+    }
+    if (settingsTemps.length > 0) {
+      code += `  sensors.begin();\n`;
+    }
+    if (settingsVoltageIn) {
+      code += `  pinMode(VOLTAGE_IN_PIN, INPUT);\n`;
+    }
+
+    code += `}
+
+void loop() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  
+  StaticJsonDocument<512> doc;
+  doc["deviceId"] = deviceId;
+  
+`;
+
+    if (settingsVoltageIn) {
+      code += `  // Read PLN Detector (LOW = Outage, HIGH = Normal)
+  float voltageIn = digitalRead(VOLTAGE_IN_PIN) == HIGH ? 12.0 : 0.0;
+  doc["voltageIn"] = voltageIn;
+  
+`;
+    } else {
+      code += `  doc["voltageIn"] = 12.0; // PLN Connected fallback\n`;
+    }
+
+    if (settingsCells) {
+      code += `  // Read analog value of battery 3S and convert back to original voltage
+  int adcVal = analogRead(CELLS_PIN);
+  float batteryVolts = (adcVal * 3.3 / 4095.0) * ((10.0 + 4.7) / 4.7);
+  doc["batteryVoltage"] = batteryVolts;
+  
+`;
+    } else {
+      code += `  doc["batteryVoltage"] = 12.2; // Default battery standby voltage\n`;
+    }
+
+    if (settingsIna12v) {
+      code += `  // Read INA219 12V Current & Bus Voltage
+  doc["voltage12v"] = ina12v.getBusVoltage_V();
+  doc["current12v"] = ina12v.getCurrent_mA() / 1000.0; // mA to A
+  
+`;
+    } else {
+      code += `  doc["voltage12v"] = 0.0;\n  doc["current12v"] = 0.0;\n`;
+    }
+
+    if (settingsIna5v) {
+      code += `  // Read INA219 5V Current & Bus Voltage
+  doc["voltage5v"] = ina5v.getBusVoltage_V();
+  doc["current5v"] = ina5v.getCurrent_mA() / 1000.0; // mA to A
+  
+`;
+    } else {
+      code += `  doc["voltage5v"] = 0.0;\n  doc["current5v"] = 0.0;\n`;
+    }
+
+    if (settingsTemps.length > 0) {
+      code += `  // Fetch temperatures
+  sensors.requestTemperatures();
+  JsonObject tempsObj = doc.createNestedObject("temperatures");
+`;
+      settingsTemps.forEach((t, i) => {
+        code += `  tempsObj["${t.id}"] = sensors.getTempCByIndex(${i});\n`;
+      });
+      code += `\n`;
+    } else {
+      code += `  // Default fallback temperatures
+  JsonObject tempsObj = doc.createNestedObject("temperatures");
+  tempsObj["system"] = 28.5;\n`;
+    }
+
+    code += `  // Serialize JSON and POST to server
+  String jsonStr;
+  serializeJson(doc, jsonStr);
+  
+  HTTPClient http;
+  http.begin(apiUrl);
+  http.addHeader("Content-Type", "application/json");
+  
+  int httpCode = http.POST(jsonStr);
+  if (httpCode > 0) {
+    Serial.printf("[HTTP] POST Response: %d\\n", httpCode);
+  } else {
+    Serial.printf("[HTTP] POST Failed: %s\\n", http.errorToString(httpCode).c_str());
+  }
+  http.end();
+  
+  delay(2000); // Telemetry interval
+}
+`;
+    return code;
+  };
 
   const fetchServerBattery = useCallback(async () => {
     try {
@@ -267,6 +494,7 @@ const UPSDashboard: React.FC = () => {
     setSettingsTemps(config.sensors?.temperatures || []);
     setNewTempId('');
     setNewTempLabel('');
+    setSettingsActiveTab("config");
 
     setIsSettingsOpen(true);
   };
@@ -562,6 +790,7 @@ const UPSDashboard: React.FC = () => {
                   setSettingsIna12v(true);
                   setSettingsIna5v(true);
                   setSettingsTemps(DEFAULT_CONFIG.sensors.temperatures);
+                  setSettingsActiveTab("config");
                   setIsSettingsOpen(true);
                 }}
                 className="p-2.5 bg-cyan-100 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400 rounded-lg hover:bg-cyan-200 dark:hover:bg-cyan-900/40 transition-colors flex items-center gap-1.5 text-xs font-bold shadow-sm"
@@ -984,168 +1213,224 @@ const UPSDashboard: React.FC = () => {
                   Register New UPS
                 </button>
               </div>
+              <div className="flex gap-2 mb-6 border-b border-gray-100 dark:border-gray-800 pb-2 relative z-10">
+                <button
+                  type="button"
+                  onClick={() => setSettingsActiveTab("config")}
+                  className={`px-4 py-2 text-xs font-black rounded-lg transition-all ${settingsActiveTab === "config" ? "bg-cyan-500 text-slate-950 shadow-md" : "text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-slate-800 bg-gray-50/50 dark:bg-slate-900/40"}`}
+                >
+                  1. Edit Configuration
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettingsActiveTab("code")}
+                  className={`px-4 py-2 text-xs font-black rounded-lg transition-all ${settingsActiveTab === "code" ? "bg-cyan-500 text-slate-950 shadow-md" : "text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-slate-800 bg-gray-50/50 dark:bg-slate-900/40"}`}
+                >
+                  2. Wiring & ESP32 Code
+                </button>
+              </div>
 
-              <div className="space-y-6">
-                {/* Meta properties */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {isAddingMode && (
-                    <div className="flex flex-col gap-1.5 md:col-span-2">
-                      <label className="text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-wider">Device ID (Unique Hardware Key)</label>
+              {settingsActiveTab === "config" ? (
+                <div className="space-y-6">
+                  {/* Meta properties */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {isAddingMode && (
+                      <div className="flex flex-col gap-1.5 md:col-span-2">
+                        <label className="text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-wider">Device ID (Unique Hardware Key)</label>
+                        <input 
+                          type="text" 
+                          value={newDeviceId}
+                          onChange={(e) => setNewDeviceId(e.target.value.trim())}
+                          className="px-4 py-2.5 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:border-cyan-500 focus:outline-none rounded-xl text-sm text-gray-850 dark:text-white font-mono shadow-sm"
+                          placeholder="e.g. ups_kitchen_01"
+                        />
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-wider">Device Name</label>
                       <input 
                         type="text" 
-                        value={newDeviceId}
-                        onChange={(e) => setNewDeviceId(e.target.value.trim())}
-                        className="px-4 py-2.5 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:border-cyan-500 focus:outline-none rounded-xl text-sm text-gray-850 dark:text-white font-mono shadow-sm"
-                        placeholder="e.g. ups_kitchen_01"
+                        value={settingsName}
+                        onChange={(e) => setSettingsName(e.target.value)}
+                        className="px-4 py-2.5 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:border-cyan-500 focus:outline-none rounded-xl text-sm text-gray-850 dark:text-white shadow-sm"
+                        placeholder="e.g. UPS Server Room"
                       />
                     </div>
-                  )}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-wider">Device Name</label>
-                    <input 
-                      type="text" 
-                      value={settingsName}
-                      onChange={(e) => setSettingsName(e.target.value)}
-                      className="px-4 py-2.5 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:border-cyan-500 focus:outline-none rounded-xl text-sm text-gray-850 dark:text-white shadow-sm"
-                      placeholder="e.g. UPS Server Room"
-                    />
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-wider">Location / Slot</label>
+                      <input 
+                        type="text" 
+                        value={settingsLocation}
+                        onChange={(e) => setSettingsLocation(e.target.value)}
+                        className="px-4 py-2.5 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:border-cyan-500 focus:outline-none rounded-xl text-sm text-gray-850 dark:text-white shadow-sm"
+                        placeholder="e.g. Rack A-4"
+                      />
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-wider">Location / Slot</label>
-                    <input 
-                      type="text" 
-                      value={settingsLocation}
-                      onChange={(e) => setSettingsLocation(e.target.value)}
-                      className="px-4 py-2.5 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:border-cyan-500 focus:outline-none rounded-xl text-sm text-gray-850 dark:text-white shadow-sm"
-                      placeholder="e.g. Rack A-4"
-                    />
-                  </div>
-                </div>
 
-                {/* Electrical Sensors Toggles */}
-                <div className="p-5 rounded-2xl bg-gray-50 dark:bg-gray-950/30 border border-gray-150 dark:border-gray-800 space-y-4 shadow-inner">
-                  <h3 className="text-xs font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-widest mb-1">Grid & Power Hardware Toggles</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* Toggle cells */}
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={settingsCells}
-                        onChange={(e) => setSettingsCells(e.target.checked)}
-                        className="rounded border-gray-250 dark:border-slate-800 bg-white dark:bg-slate-950 text-cyan-500 focus:ring-cyan-500/20"
-                      />
-                      <div>
-                        <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">Battery Cells (3S)</span>
-                        <span className="text-[9px] text-gray-450 dark:text-gray-500 block">Voltage Sensor analog</span>
-                      </div>
-                    </label>
-                    
-                    {/* Toggle voltageIn */}
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={settingsVoltageIn}
-                        onChange={(e) => setSettingsVoltageIn(e.target.checked)}
-                        className="rounded border-gray-250 dark:border-slate-800 bg-white dark:bg-slate-950 text-cyan-500 focus:ring-cyan-500/20"
-                      />
-                      <div>
-                        <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">PLN In Detector</span>
-                        <span className="text-[9px] text-gray-450 dark:text-gray-500 block">Grid outage monitor</span>
-                      </div>
-                    </label>
-
-                    {/* Toggle INA 12V */}
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={settingsIna12v}
-                        onChange={(e) => setSettingsIna12v(e.target.checked)}
-                        className="rounded border-gray-250 dark:border-slate-800 bg-white dark:bg-slate-950 text-cyan-500 focus:ring-cyan-500/20"
-                      />
-                      <div>
-                        <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">INA219 (12V Bus)</span>
-                        <span className="text-[9px] text-gray-450 dark:text-gray-500 block">Bus 12V Current & Volt</span>
-                      </div>
-                    </label>
-
-                    {/* Toggle INA 5V */}
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={settingsIna5v}
-                        onChange={(e) => setSettingsIna5v(e.target.checked)}
-                        className="rounded border-gray-250 dark:border-slate-800 bg-white dark:bg-slate-950 text-cyan-500 focus:ring-cyan-500/20"
-                      />
-                      <div>
-                        <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">INA219 (5V Bus)</span>
-                        <span className="text-[9px] text-gray-450 dark:text-gray-500 block">Bus 5V Current & Volt</span>
-                      </div>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Temperature Sensors List Editor */}
-                <div className="space-y-3">
-                  <h3 className="text-xs font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-widest">Active Temperature Sensors</h3>
-                  
-                  {/* List */}
-                  <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
-                    {settingsTemps.map((temp) => (
-                      <div key={temp.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-950/40 border border-gray-200 dark:border-gray-850 rounded-xl shadow-sm">
-                        <div className="flex items-center gap-3">
-                          <Thermometer size={14} className="text-gray-400" />
-                          <div>
-                            <span className="text-xs font-bold text-gray-700 dark:text-slate-200">{temp.label}</span>
-                            <span className="text-[9px] font-mono text-gray-400 dark:text-gray-500 block">ID: {temp.id}</span>
-                          </div>
+                  {/* Electrical Sensors Toggles */}
+                  <div className="p-5 rounded-2xl bg-gray-50 dark:bg-gray-950/30 border border-gray-150 dark:border-gray-800 space-y-4 shadow-inner">
+                    <h3 className="text-xs font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-widest mb-1">Grid & Power Hardware Toggles</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Toggle cells */}
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={settingsCells}
+                          onChange={(e) => setSettingsCells(e.target.checked)}
+                          className="rounded border-gray-250 dark:border-slate-800 bg-white dark:bg-slate-950 text-cyan-500 focus:ring-cyan-500/20"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">Battery Cells (3S)</span>
+                          <span className="text-[9px] text-gray-450 dark:text-gray-500 block">Voltage Sensor analog</span>
                         </div>
-                        <button 
-                          onClick={() => removeTempSensorSetting(temp.id)}
-                          className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-500/10 rounded-lg transition-all"
-                          title="Remove Temp Sensor"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ))}
-                    {settingsTemps.length === 0 && (
-                      <p className="text-xs text-gray-400 dark:text-gray-500 italic py-2">No temperature sensors added yet.</p>
-                    )}
+                      </label>
+                      
+                      {/* Toggle voltageIn */}
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={settingsVoltageIn}
+                          onChange={(e) => setSettingsVoltageIn(e.target.checked)}
+                          className="rounded border-gray-250 dark:border-slate-800 bg-white dark:bg-slate-950 text-cyan-500 focus:ring-cyan-500/20"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">PLN In Detector</span>
+                          <span className="text-[9px] text-gray-450 dark:text-gray-500 block">Grid outage monitor</span>
+                        </div>
+                      </label>
+
+                      {/* Toggle INA 12V */}
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={settingsIna12v}
+                          onChange={(e) => setSettingsIna12v(e.target.checked)}
+                          className="rounded border-gray-250 dark:border-slate-800 bg-white dark:bg-slate-950 text-cyan-500 focus:ring-cyan-500/20"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">INA219 (12V Bus)</span>
+                          <span className="text-[9px] text-gray-450 dark:text-gray-500 block">Bus 12V Current & Volt</span>
+                        </div>
+                      </label>
+
+                      {/* Toggle INA 5V */}
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={settingsIna5v}
+                          onChange={(e) => setSettingsIna5v(e.target.checked)}
+                          className="rounded border-gray-250 dark:border-slate-800 bg-white dark:bg-slate-950 text-cyan-500 focus:ring-cyan-500/20"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">INA219 (5V Bus)</span>
+                          <span className="text-[9px] text-gray-450 dark:text-gray-500 block">Bus 5V Current & Volt</span>
+                        </div>
+                      </label>
+                    </div>
                   </div>
 
-                  {/* Add Temp Form */}
-                  <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 grid grid-cols-1 sm:grid-cols-12 gap-3 items-end shadow-sm">
-                    <div className="sm:col-span-4 flex flex-col gap-1.5">
-                      <label className="text-[9px] text-gray-400 dark:text-gray-500 font-bold uppercase">Sensor key / ID</label>
-                      <input 
-                        type="text"
-                        value={newTempId}
-                        onChange={(e) => setNewTempId(e.target.value.toLowerCase().replace(/\s+/g, ''))}
-                        className="px-3 py-2 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:border-cyan-500 focus:outline-none rounded-lg text-xs text-gray-850 dark:text-white"
-                        placeholder="e.g. heatsink"
-                      />
+                  {/* Temperature Sensors List Editor */}
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-widest">Active Temperature Sensors</h3>
+                    
+                    {/* List */}
+                    <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
+                      {settingsTemps.map((temp) => (
+                        <div key={temp.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-950/40 border border-gray-200 dark:border-gray-850 rounded-xl shadow-sm">
+                          <div className="flex items-center gap-3">
+                            <Thermometer size={14} className="text-gray-400" />
+                            <div>
+                              <span className="text-xs font-bold text-gray-700 dark:text-slate-200">{temp.label}</span>
+                              <span className="text-[9px] font-mono text-gray-400 dark:text-gray-500 block">ID: {temp.id}</span>
+                            </div>
+                          </div>
+                          <button 
+                            type="button"
+                            onClick={() => removeTempSensorSetting(temp.id)}
+                            className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-500/10 rounded-lg transition-all"
+                            title="Remove Temp Sensor"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                      {settingsTemps.length === 0 && (
+                        <p className="text-xs text-gray-400 dark:text-gray-500 italic py-2">No temperature sensors added yet.</p>
+                      )}
                     </div>
-                    <div className="sm:col-span-6 flex flex-col gap-1.5">
-                      <label className="text-[9px] text-gray-400 dark:text-gray-500 font-bold uppercase">Display Name / Label</label>
-                      <input 
-                        type="text"
-                        value={newTempLabel}
-                        onChange={(e) => setNewTempLabel(e.target.value)}
-                        className="px-3 py-2 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:border-cyan-500 focus:outline-none rounded-lg text-xs text-gray-850 dark:text-white"
-                        placeholder="e.g. Heatsink Temp"
-                      />
+
+                    {/* Add Temp Form */}
+                    <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 grid grid-cols-1 sm:grid-cols-12 gap-3 items-end shadow-sm">
+                      <div className="sm:col-span-4 flex flex-col gap-1.5">
+                        <label className="text-[9px] text-gray-400 dark:text-gray-500 font-bold uppercase">Sensor key / ID</label>
+                        <input 
+                          type="text"
+                          value={newTempId}
+                          onChange={(e) => setNewTempId(e.target.value.toLowerCase().replace(/\s+/g, ''))}
+                          className="px-3 py-2 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:border-cyan-500 focus:outline-none rounded-lg text-xs text-gray-850 dark:text-white"
+                          placeholder="e.g. heatsink"
+                        />
+                      </div>
+                      <div className="sm:col-span-6 flex flex-col gap-1.5">
+                        <label className="text-[9px] text-gray-400 dark:text-gray-500 font-bold uppercase">Display Name / Label</label>
+                        <input 
+                          type="text"
+                          value={newTempLabel}
+                          onChange={(e) => setNewTempLabel(e.target.value)}
+                          className="px-3 py-2 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:border-cyan-500 focus:outline-none rounded-lg text-xs text-gray-850 dark:text-white"
+                          placeholder="e.g. Heatsink Temp"
+                        />
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={addTempSensorSetting}
+                        className="sm:col-span-2 w-full py-2.5 bg-cyan-500 hover:bg-cyan-600 text-slate-950 rounded-lg font-bold text-xs flex items-center justify-center gap-1 transition-all active:scale-95 cursor-pointer shadow-md shadow-cyan-500/10"
+                      >
+                        <Plus size={14} />
+                        Add
+                      </button>
                     </div>
-                    <button 
-                      type="button"
-                      onClick={addTempSensorSetting}
-                      className="sm:col-span-2 w-full py-2.5 bg-cyan-500 hover:bg-cyan-600 text-slate-950 rounded-lg font-bold text-xs flex items-center justify-center gap-1 transition-all active:scale-95 cursor-pointer shadow-md shadow-cyan-500/10"
-                    >
-                      <Plus size={14} />
-                      Add
-                    </button>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-6 animate-fadeIn">
+                  {/* Wiring Diagram Block */}
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-widest">Wiring & Connection Guidelines</h3>
+                    <pre className="p-4 bg-gray-50 dark:bg-gray-950 border border-gray-150 dark:border-gray-850 rounded-2xl text-[10px] md:text-xs font-mono text-gray-700 dark:text-gray-300 leading-relaxed overflow-x-auto whitespace-pre select-text">
+                      {getWiringGuide()}
+                    </pre>
+                  </div>
+
+                  {/* ESP32 Arduino Sketch Code Block */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-xs font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-widest">Dynamic ESP32 Arduino Code</h3>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(getArduinoCode(selectedDeviceId || "new_ups"))}
+                        className="px-3 py-1 bg-cyan-500 hover:bg-cyan-600 text-slate-950 text-[10px] font-black rounded-lg transition-all shadow-md shadow-cyan-500/10 cursor-pointer active:scale-95"
+                      >
+                        Copy Code
+                      </button>
+                    </div>
+                    <pre className="p-4 bg-gray-50 dark:bg-gray-950 border border-gray-150 dark:border-gray-850 rounded-2xl text-[10px] font-mono text-gray-750 dark:text-gray-300 max-h-[300px] overflow-y-auto leading-relaxed select-text select-all">
+                      {getArduinoCode(selectedDeviceId || "new_ups")}
+                    </pre>
+                  </div>
+
+                  {/* Guidelines */}
+                  <div className="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-xs text-gray-600 dark:text-cyan-300/80 leading-relaxed space-y-1">
+                    <span className="font-bold text-cyan-600 dark:text-cyan-400 block mb-1">💡 Instructions:</span>
+                    <p>1. Copy the dynamic sketch code above and paste it into your Arduino IDE.</p>
+                    <p>2. Configure your ESP32 board options (e.g. ESP32 Dev Module).</p>
+                    <p>3. Install the <b>ArduinoJson</b>, <b>Adafruit INA219</b>, and <b>DallasTemperature</b> libraries from the Arduino Library Manager.</p>
+                    <p>4. Solder and wire up your physical layout matching the Wiring Guide above.</p>
+                    <p>5. Compile and upload. Once the hardware powers on, it will stream data directly to this dashboard!</p>
+                  </div>
+                </div>
+              )}
 
               {/* Actions Footer */}
               <div className="flex justify-end items-center gap-3 mt-8 pt-4 border-t border-gray-150 dark:border-gray-800">
