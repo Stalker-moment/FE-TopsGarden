@@ -136,13 +136,42 @@ const UPSDashboard: React.FC = () => {
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
     
-    // Comments
-    html = html.replace(/(\/\/.*)/g, '<span class="text-gray-400 dark:text-gray-500 italic">$1</span>');
-    
-    // Directives (#include, #define)
+    const placeholders: string[] = [];
+    const getLetterKey = (index: number) => {
+      let key = "";
+      let temp = index;
+      do {
+        key = String.fromCharCode(65 + (temp % 26)) + key;
+        temp = Math.floor(temp / 26) - 1;
+      } while (temp >= 0);
+      return `___PLACEHOLDER_${key}___`;
+    };
+
+    const pushPlaceholder = (val: string) => {
+      const key = getLetterKey(placeholders.length);
+      placeholders.push(val);
+      return key;
+    };
+
+    // 1. Strings
+    html = html.replace(/("(?:[^"\\]|\\.)*")/g, (match) => {
+      return pushPlaceholder(`<span class="text-emerald-500 dark:text-emerald-350">${match}</span>`);
+    });
+
+    // 2. Block Comments
+    html = html.replace(/(\/\*[\s\S]*?\*\/)/g, (match) => {
+      return pushPlaceholder(`<span class="text-gray-400 dark:text-gray-500 italic">${match}</span>`);
+    });
+
+    // 3. Line Comments
+    html = html.replace(/(\/\/.*)/g, (match) => {
+      return pushPlaceholder(`<span class="text-gray-400 dark:text-gray-500 italic">${match}</span>`);
+    });
+
+    // 4. Directives
     html = html.replace(/(#\w+)/g, '<span class="text-orange-500 font-semibold">$1</span>');
     
-    // Keywords
+    // 5. Keywords
     const keywords = [
       "void", "setup", "loop", "const", "char", "int", "float", "bool", "if", "else", 
       "while", "return", "true", "false", "static", "delay", "pinMode", "digitalRead", "analogRead",
@@ -153,7 +182,7 @@ const UPSDashboard: React.FC = () => {
       html = html.replace(reg, '<span class="text-cyan-500 font-bold">$1</span>');
     });
 
-    // Custom Types / Objects
+    // 6. Custom Types / Objects
     const types = [
       "WiFi", "HTTPClient", "StaticJsonDocument", "JsonObject", "serializeJson", "Wire", "Serial", "Adafruit_INA219", "OneWire", "DallasTemperature"
     ];
@@ -162,11 +191,14 @@ const UPSDashboard: React.FC = () => {
       html = html.replace(reg, '<span class="text-yellow-500 dark:text-yellow-400 font-bold">$1</span>');
     });
 
-    // Strings
-    html = html.replace(/("(?:[^"\\]|\\.)*")/g, '<span class="text-emerald-500 dark:text-emerald-350">$1</span>');
-
-    // Numbers
+    // 7. Numbers (only when outside placeholders and classes)
     html = html.replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="text-purple-400 dark:text-purple-300 font-semibold">$1</span>');
+
+    // 8. Restore Placeholders (reverse order to ensure nested placeholders resolve correctly)
+    for (let i = placeholders.length - 1; i >= 0; i--) {
+      const key = getLetterKey(i);
+      html = html.replace(key, placeholders[i]);
+    }
 
     return html;
   };
