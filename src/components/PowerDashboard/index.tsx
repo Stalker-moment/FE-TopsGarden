@@ -527,7 +527,10 @@ const PowerDashboard: React.FC = () => {
   };
 
   // ─────── Derived Data ───────
-  const displayData = realtimeData || { voltage: 0, current: 0, power: 0, energy: 0, frequency: 0, pf: 0 };
+  const displayData = useMemo(
+    () => realtimeData || { voltage: 0, current: 0, power: 0, energy: 0, frequency: 0, pf: 0 },
+    [realtimeData]
+  );
   const estimatedCost = displayData.energy * PLN_RATE;
   const co2Saved = (displayData.energy * 0.85).toFixed(3);
 
@@ -861,6 +864,21 @@ const PowerDashboard: React.FC = () => {
   const usageBarColorsKey = (usageBarColors || []).join(",");
   const usageCategoriesKey = usageChartCategories.join(",");
 
+  // Device / WS status derived values — recomputed every 5s via deviceStatusTick
+  const wsConnected = wsStatus === "CONNECTED";
+  const { deviceOnline, agoSec, agoLabel } = useMemo(() => {
+    const STALE_MS = 30_000;
+    const nowMs = Date.now();
+    const agoMs = deviceLastSeen ? nowMs - deviceLastSeen : null;
+    const online = agoMs !== null && agoMs < STALE_MS;
+    const sec = agoMs !== null ? Math.round(agoMs / 1000) : null;
+    const label = sec === null
+      ? 'Belum ada data'
+      : sec < 60 ? `${sec}s lalu` : `${Math.round(sec / 60)}m lalu`;
+    return { deviceOnline: online, agoSec: sec, agoLabel: label };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deviceLastSeen, deviceStatusTick]);
+
   // kWh Chart Options
   const usageChartOptions: ApexOptions = useMemo(() => ({
     chart: {
@@ -965,33 +983,34 @@ const PowerDashboard: React.FC = () => {
     },
     legend: { show: false },
     theme: { mode: isDarkMode ? 'dark' : 'light' }
-  }), [isDarkMode, usageCategoriesKey, usageBarColorsKey, usageBarColors, usageChartCategories, usageView, selectedUsageMetric, minutelyUsage, hourlyUsage, dailyUsage, getOutageSummaryForRange, formatOutageDuration, usageYear, usageMonth, usageDay, usageHour]);
+  }), [isDarkMode, usageBarColors, usageChartCategories, usageView, selectedUsageMetric, minutelyUsage, hourlyUsage, dailyUsage, getOutageSummaryForRange, formatOutageDuration, usageYear, usageMonth, usageDay, usageHour]);
 
 
-  // Live Trend Options
-  const powerTrendSeries: any[] = [];
-  const powerTrendColors: string[] = [];
-  const powerTrendYAxis: any[] = [];
+  // Live Trend Options — memoized stable arrays
+  const { powerTrendSeries, powerTrendColors, powerTrendYAxis } = useMemo(() => {
+    const series: any[] = [];
+    const colors: string[] = [];
+    const yAxis: any[] = [];
 
-  if (activeMetrics.power) {
-    powerTrendSeries.push({ name: "Power (W)", data: chartData.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.power })) });
-    powerTrendColors.push('#f59e0b');
-    powerTrendYAxis.push({ seriesName: 'Power (W)', show: true, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (val: number) => val.toFixed(1) } });
-  }
-  if (activeMetrics.voltage) {
-    powerTrendSeries.push({ name: "Voltage (V)", data: chartData.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.voltage })) });
-    powerTrendColors.push('#3b82f6');
-    powerTrendYAxis.push({ seriesName: 'Voltage (V)', opposite: powerTrendYAxis.length > 0, show: true, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (val: number) => val.toFixed(1) } });
-  }
-  if (activeMetrics.current) {
-    powerTrendSeries.push({ name: "Current (A)", data: chartData.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.current })) });
-    powerTrendColors.push('#ef4444');
-    powerTrendYAxis.push({ seriesName: 'Current (A)', opposite: powerTrendYAxis.length > 0, show: true, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (val: number) => val.toFixed(2) } });
-  }
-  if (powerTrendYAxis.length === 0) powerTrendYAxis.push({ show: false });
+    if (activeMetrics.power) {
+      series.push({ name: "Power (W)", data: chartData.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.power })) });
+      colors.push('#f59e0b');
+      yAxis.push({ seriesName: 'Power (W)', show: true, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (val: number) => val.toFixed(1) } });
+    }
+    if (activeMetrics.voltage) {
+      series.push({ name: "Voltage (V)", data: chartData.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.voltage })) });
+      colors.push('#3b82f6');
+      yAxis.push({ seriesName: 'Voltage (V)', opposite: yAxis.length > 0, show: true, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (val: number) => val.toFixed(1) } });
+    }
+    if (activeMetrics.current) {
+      series.push({ name: "Current (A)", data: chartData.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.current })) });
+      colors.push('#ef4444');
+      yAxis.push({ seriesName: 'Current (A)', opposite: yAxis.length > 0, show: true, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (val: number) => val.toFixed(2) } });
+    }
+    if (yAxis.length === 0) yAxis.push({ show: false });
 
-  const powerTrendColorsKey = powerTrendColors.join(",");
-  const powerTrendYAxisKey = powerTrendYAxis.length;
+    return { powerTrendSeries: series, powerTrendColors: colors, powerTrendYAxis: yAxis };
+  }, [activeMetrics, chartData, isDarkMode]);
 
   const powerTrendOptions: ApexOptions = useMemo(() => ({
     chart: { 
@@ -1025,7 +1044,7 @@ const PowerDashboard: React.FC = () => {
       }}
     },
     theme: { mode: isDarkMode ? 'dark' : 'light' }
-  }), [isDarkMode, powerTrendColorsKey, powerTrendYAxisKey, powerTrendColors, powerTrendYAxis]);
+  }), [isDarkMode, powerTrendColors, powerTrendYAxis]);
 
   // Fullscreen Usage Options
   const fullscreenUsageOptions: ApexOptions = useMemo(() => ({
@@ -1344,67 +1363,49 @@ const PowerDashboard: React.FC = () => {
             )}
 
             {/* === Dual Status Indicators === */}
-            {(() => {
-              // WS indicator
-              const wsConnected = wsStatus === "CONNECTED";
-              // Device freshness: offline if no data in 30s, or never seen
-              const STALE_MS = 30_000;
-              // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-              deviceStatusTick; // read tick to trigger re-render
-              const nowMs = Date.now();
-              const agoMs = deviceLastSeen ? nowMs - deviceLastSeen : null;
-              const deviceOnline = agoMs !== null && agoMs < STALE_MS;
-              const agoSec = agoMs !== null ? Math.round(agoMs / 1000) : null;
-              const agoLabel = agoSec === null
-                ? 'Belum ada data'
-                : agoSec < 60 ? `${agoSec}s lalu` : `${Math.round(agoSec / 60)}m lalu`;
+            <div className="flex items-center gap-2">
+              {/* 1. WebSocket Connection */}
+              <div
+                title={wsConnected ? 'WebSocket terhubung ke server' : 'WebSocket terputus dari server'}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold shadow-sm transition-all duration-300 ${
+                  wsConnected
+                    ? 'bg-white dark:bg-gray-800 border-green-300 dark:border-green-700 text-green-700 dark:text-green-400'
+                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400'
+                }`}
+              >
+                <svg className={`w-3 h-3 ${wsConnected ? 'text-green-500' : 'text-gray-400'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+                </svg>
+                <span className="hidden sm:inline">{wsConnected ? 'Server' : 'Offline'}</span>
+                <div className={`w-1.5 h-1.5 rounded-full ${
+                  wsConnected ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
+                }`} />
+              </div>
 
-              return (
-                <div className="flex items-center gap-2">
-                  {/* 1. WebSocket Connection */}
-                  <div
-                    title={wsConnected ? 'WebSocket terhubung ke server' : 'WebSocket terputus dari server'}
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold shadow-sm transition-all duration-300 ${
-                      wsConnected
-                        ? 'bg-white dark:bg-gray-800 border-green-300 dark:border-green-700 text-green-700 dark:text-green-400'
-                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400'
-                    }`}
-                  >
-                    <svg className={`w-3 h-3 ${wsConnected ? 'text-green-500' : 'text-gray-400'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
-                    </svg>
-                    <span className="hidden sm:inline">{wsConnected ? 'Server' : 'Offline'}</span>
-                    <div className={`w-1.5 h-1.5 rounded-full ${
-                      wsConnected ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
-                    }`} />
-                  </div>
-
-                  {/* 2. Device Sensor Status */}
-                  {selectedDeviceId !== 'all' && (
-                    <div
-                      title={deviceOnline
-                        ? `Alat mengirim data ${agoLabel}`
-                        : agoSec === null ? 'Alat belum pernah mengirim data' : `Data terakhir ${agoLabel} — kemungkinan offline`
-                      }
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold shadow-sm transition-all duration-300 ${
-                        deviceOnline
-                          ? 'bg-white dark:bg-gray-800 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400'
-                          : 'bg-white dark:bg-gray-800 border-orange-200 dark:border-orange-800 text-orange-500 dark:text-orange-400'
-                      }`}
-                    >
-                      <FaPlug size={10} className={deviceOnline ? 'text-blue-500' : 'text-orange-400'} />
-                      <span className="hidden sm:inline">{deviceOnline ? 'Alat' : 'Alat'}</span>
-                      <div className={`w-1.5 h-1.5 rounded-full ${
-                        deviceOnline ? 'bg-blue-500 animate-pulse' : 'bg-orange-400'
-                      }`} />
-                      <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 hidden md:inline">
-                        {deviceOnline ? agoLabel : (agoSec !== null ? agoLabel : '—')}
-                      </span>
-                    </div>
-                  )}
+              {/* 2. Device Sensor Status */}
+              {selectedDeviceId !== 'all' && (
+                <div
+                  title={deviceOnline
+                    ? `Alat mengirim data ${agoLabel}`
+                    : agoSec === null ? 'Alat belum pernah mengirim data' : `Data terakhir ${agoLabel} — kemungkinan offline`
+                  }
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold shadow-sm transition-all duration-300 ${
+                    deviceOnline
+                      ? 'bg-white dark:bg-gray-800 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400'
+                      : 'bg-white dark:bg-gray-800 border-orange-200 dark:border-orange-800 text-orange-500 dark:text-orange-400'
+                  }`}
+                >
+                  <FaPlug size={10} className={deviceOnline ? 'text-blue-500' : 'text-orange-400'} />
+                  <span className="hidden sm:inline">Alat</span>
+                  <div className={`w-1.5 h-1.5 rounded-full ${
+                    deviceOnline ? 'bg-blue-500 animate-pulse' : 'bg-orange-400'
+                  }`} />
+                  <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 hidden md:inline">
+                    {agoSec !== null ? agoLabel : '—'}
+                  </span>
                 </div>
-              );
-            })()}
+              )}
+            </div>
             
             <div className="flex items-center gap-2">
               <button 
