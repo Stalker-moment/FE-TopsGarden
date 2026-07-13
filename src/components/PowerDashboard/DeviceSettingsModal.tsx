@@ -444,7 +444,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                         </div>
                       ) : (
                         <div className="pl-6 py-2 px-3 bg-rose-500/5 border border-rose-500/10 rounded-xl text-[10px] text-rose-500 dark:text-rose-455 font-medium leading-relaxed">
-                          ⚠️ <b>Manual Reconnect:</b> Sirkuit akan tetap terputus (mati) setelah relay trip/putus. Anda harus menekan tombol "Reset & Reconnect (ON)" secara manual di dashboard utama untuk menyalakannya kembali.
+                          ⚠️ <b>Manual Reconnect:</b> Sirkuit akan tetap terputus (mati) setelah relay trip/putus. Anda harus menekan tombol &quot;Reset &amp; Reconnect (ON)&quot; secara manual di dashboard utama untuk menyalakannya kembali.
                         </div>
                       )}
                     </div>
@@ -657,7 +657,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                         </div>
                       ) : (
                         <div className="pl-6 py-2 px-3 bg-rose-500/5 border border-rose-500/10 rounded-xl text-[10px] text-rose-500 dark:text-rose-455 font-medium leading-relaxed">
-                          ⚠️ <b>Manual Reconnect:</b> Sirkuit akan tetap terputus (mati) setelah relay trip/putus. Anda harus menekan tombol "Reset & Reconnect (ON)" secara manual di dashboard utama untuk menyalakannya kembali.
+                          ⚠️ <b>Manual Reconnect:</b> Sirkuit akan tetap terputus (mati) setelah relay trip/putus. Anda harus menekan tombol &quot;Reset &amp; Reconnect (ON)&quot; secara manual di dashboard utama untuk menyalakannya kembali.
                         </div>
                       )}
                     </div>
