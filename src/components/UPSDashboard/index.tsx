@@ -130,6 +130,47 @@ const UPSDashboard: React.FC = () => {
     alert("Arduino code copied to clipboard!");
   };
 
+  const highlightCpp = (code: string) => {
+    let html = code
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    
+    // Comments
+    html = html.replace(/(\/\/.*)/g, '<span class="text-gray-400 dark:text-gray-500 italic">$1</span>');
+    
+    // Directives (#include, #define)
+    html = html.replace(/(#\w+)/g, '<span class="text-orange-500 font-semibold">$1</span>');
+    
+    // Keywords
+    const keywords = [
+      "void", "setup", "loop", "const", "char", "int", "float", "bool", "if", "else", 
+      "while", "return", "true", "false", "static", "delay", "pinMode", "digitalRead", "analogRead",
+      "INPUT", "OUTPUT", "HIGH", "LOW", "abs"
+    ];
+    keywords.forEach(kw => {
+      const reg = new RegExp(`\\b(${kw})\\b`, 'g');
+      html = html.replace(reg, '<span class="text-cyan-500 font-bold">$1</span>');
+    });
+
+    // Custom Types / Objects
+    const types = [
+      "WiFi", "HTTPClient", "StaticJsonDocument", "JsonObject", "serializeJson", "Wire", "Serial", "Adafruit_INA219", "OneWire", "DallasTemperature"
+    ];
+    types.forEach(t => {
+      const reg = new RegExp(`\\b(${t})\\b`, 'g');
+      html = html.replace(reg, '<span class="text-yellow-500 dark:text-yellow-400 font-bold">$1</span>');
+    });
+
+    // Strings
+    html = html.replace(/("(?:[^"\\]|\\.)*")/g, '<span class="text-emerald-500 dark:text-emerald-350">$1</span>');
+
+    // Numbers
+    html = html.replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="text-purple-400 dark:text-purple-300 font-semibold">$1</span>');
+
+    return html;
+  };
+
   const getWiringGuide = () => {
     const lines: string[] = [];
     lines.push("==========================================================");
@@ -1396,33 +1437,129 @@ void loop() {
               ) : (
                 <div className="space-y-6 animate-fadeIn">
                   {/* Wiring Diagram Block */}
-                  <div className="space-y-2">
-                    <h3 className="text-xs font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-widest">Wiring & Connection Guidelines</h3>
-                    <pre className="p-4 bg-gray-50 dark:bg-gray-950 border border-gray-150 dark:border-gray-850 rounded-2xl text-[10px] md:text-xs font-mono text-gray-700 dark:text-gray-300 leading-relaxed overflow-x-auto whitespace-pre select-text">
-                      {getWiringGuide()}
-                    </pre>
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-widest flex items-center gap-2">
+                      🔌 Wiring & Connection Steps
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {settingsVoltageIn && (
+                        <div className="p-4 rounded-2xl bg-gray-50/50 dark:bg-gray-950/20 border border-gray-150 dark:border-gray-800 space-y-2 shadow-sm transition-all hover:border-cyan-500/20">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 uppercase tracking-wider font-mono">PLN Monitor</span>
+                            <span className="text-[9px] font-mono font-bold text-gray-400 dark:text-gray-500">GPIO 35</span>
+                          </div>
+                          <h4 className="text-xs font-black text-gray-855 dark:text-white">PLN Outage Detector</h4>
+                          <p className="text-[10px] text-gray-550 dark:text-gray-400 leading-relaxed">
+                            Hubhubungankan adaptor PLN 12V ke input Optokopler. Kaki output optokopler dihubungkan ke pin <span className="font-mono text-cyan-550 dark:text-cyan-400 font-bold bg-cyan-500/5 px-1 py-0.5 rounded">GPIO 35</span>. Berfungsi memicu alarm pemadaman listrik secara instan.
+                          </p>
+                        </div>
+                      )}
+
+                      {settingsCells && (
+                        <div className="p-4 rounded-2xl bg-gray-50/50 dark:bg-gray-950/20 border border-gray-150 dark:border-gray-800 space-y-2 shadow-sm transition-all hover:border-cyan-500/20">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-550 dark:text-emerald-450 uppercase tracking-wider font-mono">3S Cells</span>
+                            <span className="text-[9px] font-mono font-bold text-gray-400 dark:text-gray-500">GPIO 34</span>
+                          </div>
+                          <h4 className="text-xs font-black text-gray-855 dark:text-white">Battery Cell Voltage Division</h4>
+                          <p className="text-[10px] text-gray-550 dark:text-gray-400 leading-relaxed">
+                            Hubungkan kutub positif baterai 3S (12.6V max) ke rangkaian pembagi tegangan (<span className="font-semibold text-gray-700 dark:text-slate-300">Resistor 10k & 4.7k Ohm</span>). Hubungkan titik tengah resistor ke pin analog <span className="font-mono text-cyan-550 dark:text-cyan-400 font-bold bg-cyan-500/5 px-1 py-0.5 rounded">GPIO 34</span>.
+                          </p>
+                        </div>
+                      )}
+
+                      {(settingsIna12v || settingsIna5v) && (
+                        <div className="p-4 rounded-2xl bg-gray-50/50 dark:bg-gray-950/20 border border-gray-150 dark:border-gray-800 space-y-2 shadow-sm md:col-span-2 transition-all hover:border-cyan-500/20">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-500 uppercase tracking-wider font-mono">I2C BUS</span>
+                            <span className="text-[9px] font-mono font-bold text-gray-400 dark:text-gray-500">SDA=21 · SCL=22</span>
+                          </div>
+                          <h4 className="text-xs font-black text-gray-855 dark:text-white font-mono">INA219 Current & Bus Monitors</h4>
+                          <div className="text-[10px] text-gray-555 dark:text-gray-400 leading-relaxed space-y-2">
+                            <p>Hubungkan pin I2C dari seluruh modul sensor INA219 secara paralel ke ESP32:</p>
+                            <ul className="list-disc pl-4 space-y-1">
+                              <li>ESP32 <span className="font-mono font-bold text-cyan-550 dark:text-cyan-400 bg-cyan-500/5 px-1.5 py-0.5 rounded">Pin 21 (SDA)</span> ke SDA INA219</li>
+                              <li>ESP32 <span className="font-mono font-bold text-cyan-550 dark:text-cyan-400 bg-cyan-500/5 px-1.5 py-0.5 rounded">Pin 22 (SCL)</span> ke SCL INA219</li>
+                              {settingsIna12v && <li><b>Jalur 12V</b>: Gunakan alamat default <span className="font-mono font-bold text-yellow-500">0x40</span> (Biarkan pin A0/A1 terbuka)</li>}
+                              {settingsIna5v && <li><b>Jalur 5V</b>: Atur alamat sensor ke <span className="font-mono font-bold text-yellow-500">0x41</span> (Solder jumper A0 hingga tertutup)</li>}
+                            </ul>
+                          </div>
+                        </div>
+                      )}
+
+                      {settingsTemps.length > 0 && (
+                        <div className="p-4 rounded-2xl bg-gray-50/50 dark:bg-gray-950/20 border border-gray-150 dark:border-gray-800 space-y-2 shadow-sm md:col-span-2 transition-all hover:border-cyan-500/20">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded bg-blue-500/10 text-blue-500 uppercase tracking-wider font-mono">OneWire</span>
+                            <span className="text-[9px] font-mono font-bold text-gray-400 dark:text-gray-500">GPIO 4</span>
+                          </div>
+                          <h4 className="text-xs font-black text-gray-855 dark:text-white">DS18B20 Temperature Sensors</h4>
+                          <p className="text-[10px] text-gray-555 dark:text-gray-400 leading-relaxed mb-1">
+                            Hubungkan semua kabel Data sensor DS18B20 secara paralel ke pin <span className="font-mono text-cyan-550 dark:text-cyan-400 font-bold bg-cyan-500/5 px-1 py-0.5 rounded">GPIO 4</span>. Pasang resistor pull-up <span className="font-semibold text-amber-500 dark:text-amber-400">4.7k Ohm</span> antara pin Data dan 3.3V.
+                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-gray-100 dark:border-gray-800/60">
+                            {settingsTemps.map((t, idx) => (
+                              <div key={t.id} className="p-2 rounded bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800/80 flex justify-between items-center text-[10px] shadow-sm">
+                                <span className="font-bold text-gray-700 dark:text-slate-350">{t.label}</span>
+                                <span className="font-mono text-cyan-550 dark:text-cyan-400 bg-cyan-500/5 px-1.5 py-0.5 rounded font-black">Dallas Index {idx}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* ESP32 Arduino Sketch Code Block */}
-                  <div className="space-y-2">
+                  {/* IDE-like ESP32 Code Block */}
+                  <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <h3 className="text-xs font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-widest">Dynamic ESP32 Arduino Code</h3>
+                      <h3 className="text-xs font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-widest flex items-center gap-2">
+                        💻 ESP32 Ingestion Sketch
+                      </h3>
                       <button
                         type="button"
                         onClick={() => copyToClipboard(getArduinoCode(selectedDeviceId || "new_ups"))}
-                        className="px-3 py-1 bg-cyan-500 hover:bg-cyan-600 text-slate-950 text-[10px] font-black rounded-lg transition-all shadow-md shadow-cyan-500/10 cursor-pointer active:scale-95"
+                        className="px-3.5 py-1.5 bg-cyan-500 hover:bg-cyan-600 text-slate-950 text-[10px] font-black rounded-lg transition-all shadow-md shadow-cyan-500/10 cursor-pointer active:scale-95 flex items-center gap-1"
                       >
-                        Copy Code
+                        Copy Sketch Code
                       </button>
                     </div>
-                    <pre className="p-4 bg-gray-50 dark:bg-gray-950 border border-gray-150 dark:border-gray-850 rounded-2xl text-[10px] font-mono text-gray-750 dark:text-gray-300 max-h-[300px] overflow-y-auto leading-relaxed select-text select-all">
-                      {getArduinoCode(selectedDeviceId || "new_ups")}
-                    </pre>
+
+                    {/* Code Window Container */}
+                    <div className="rounded-2xl border border-gray-250 dark:border-gray-800 bg-[#0B0F19] text-gray-305 overflow-hidden shadow-xl flex flex-col font-mono select-none">
+                      {/* Window Header */}
+                      <div className="flex items-center justify-between px-4 py-3 bg-[#131927] border-b border-gray-800">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2.5 h-2.5 rounded-full bg-[#FF5F56]"></div>
+                          <div className="w-2.5 h-2.5 rounded-full bg-[#FFBD2E]"></div>
+                          <div className="w-2.5 h-2.5 rounded-full bg-[#27C93F]"></div>
+                        </div>
+                        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">UPS_Firmware.ino</span>
+                        <div className="w-12"></div>
+                      </div>
+
+                      {/* Code Viewport with Lines */}
+                      <div className="flex text-xs leading-relaxed max-h-[350px] overflow-y-auto custom-scrollbar">
+                        {/* Line Numbers column */}
+                        <div className="py-4 text-right pr-3 pl-4 text-gray-600 border-r border-gray-800 bg-[#090C14] min-w-[3rem]">
+                          {getArduinoCode(selectedDeviceId || "new_ups").split("\n").map((_, i) => (
+                            <div key={i}>{i + 1}</div>
+                          ))}
+                        </div>
+                        {/* Highlights code area */}
+                        <pre className="py-4 px-4 overflow-x-auto flex-1 whitespace-pre leading-relaxed font-mono select-text">
+                          <code 
+                            className="block font-mono"
+                            dangerouslySetInnerHTML={{ __html: highlightCpp(getArduinoCode(selectedDeviceId || "new_ups")) }} 
+                          />
+                        </pre>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Guidelines */}
-                  <div className="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-xs text-gray-600 dark:text-cyan-300/80 leading-relaxed space-y-1">
-                    <span className="font-bold text-cyan-600 dark:text-cyan-400 block mb-1">💡 Instructions:</span>
+                  <div className="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-xs text-gray-600 dark:text-cyan-300/80 leading-relaxed space-y-1.5">
+                    <span className="font-bold text-cyan-600 dark:text-cyan-400 block mb-1">💡 Instructions & Deployment:</span>
                     <p>1. Copy the dynamic sketch code above and paste it into your Arduino IDE.</p>
                     <p>2. Configure your ESP32 board options (e.g. ESP32 Dev Module).</p>
                     <p>3. Install the <b>ArduinoJson</b>, <b>Adafruit INA219</b>, and <b>DallasTemperature</b> libraries from the Arduino Library Manager.</p>
