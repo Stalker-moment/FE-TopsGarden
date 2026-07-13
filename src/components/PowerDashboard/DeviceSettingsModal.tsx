@@ -174,395 +174,538 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
         </div>
       </div>
 
-      {/* Main Settings Content Card (Full Width) */}
-      <div className="w-full bg-white dark:bg-slate-900/50 border border-gray-150 dark:border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl backdrop-blur-md relative overflow-hidden">
-        {/* Background Decor */}
-        <div className="absolute top-0 right-0 -mr-24 -mt-24 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 -ml-24 -mb-24 w-72 h-72 bg-yellow-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      {/* Two-Column Responsive Layout Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        {/* Left Column: Registered Sensors List */}
+        <div className="lg:col-span-5 bg-white dark:bg-slate-900/50 border border-gray-150 dark:border-slate-800 rounded-3xl p-5 shadow-xl backdrop-blur-md relative overflow-hidden flex flex-col space-y-4">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-sm font-black text-gray-800 dark:text-white uppercase tracking-wider">Registered Sensors</h3>
+            {!isAddingMode && (
+              <button 
+                onClick={() => { 
+                  setIsAddingMode(true); 
+                  setEditingId(null); 
+                  setFormData({name:"", location:"", hasRelay: false, overcurrentThreshold: 10.0, overcurrentDelay: 0, autoReconnect: false, reconnectDelay: 30}); 
+                }} 
+                className="px-3 py-1.5 text-[10px] font-bold bg-blue-500 hover:bg-blue-600 text-white rounded-lg flex items-center gap-1.5 transition-all shadow-md shadow-blue-500/10 cursor-pointer active:scale-95"
+              >
+                <FaPlus size={8} /> Register New
+              </button>
+            )}
+          </div>
 
-        {/* List of Devices */}
-        <div className="flex-1 overflow-y-auto pr-2 space-y-4 mb-6 custom-scrollbar relative z-10">
+          {/* List Wrapper */}
+          <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar">
             <AnimatePresence mode="popLayout">
-                {devices.map((device) => (
-                <motion.div 
+              {devices.map((device) => {
+                const isActive = editingId === device.id;
+                return (
+                  <motion.div 
                     key={device.id}
                     layout
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    className={`group relative overflow-hidden p-4 rounded-2xl border transition-all ${
-                        editingId === device.id 
-                        ? 'bg-blue-50/50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/50' 
-                        : 'bg-gray-50/50 dark:bg-gray-800/40 border-gray-100 dark:border-gray-700/50 hover:border-blue-200 dark:hover:border-blue-800/30 hover:shadow-md'
-                    }`}
-                >
-                    {editingId === device.id ? (
-                    // Edit Mode Row
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Device Name</label>
-                                <input 
-                                className="w-full px-4 py-2.5 text-sm rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-gray-850 dark:text-white"
-                                placeholder="e.g. Living Room" 
-                                value={formData.name}
-                                onChange={e => setFormData({...formData, name: e.target.value})}
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Location</label>
-                                <input 
-                                className="w-full px-4 py-2.5 text-sm rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-gray-850 dark:text-white"
-                                placeholder="e.g. First Floor" 
-                                value={formData.location}
-                                onChange={e => setFormData({...formData, location: e.target.value})}
-                                />
-                            </div>
-                        </div>
-
-                        {/* Relay Configuration Fields */}
-                        <div className="p-3.5 rounded-xl bg-gray-100/50 dark:bg-gray-950/40 border border-gray-150 dark:border-gray-800 space-y-4">
-                            <label className="flex items-center gap-2.5 cursor-pointer">
-                                <input 
-                                    type="checkbox" 
-                                    checked={formData.hasRelay}
-                                    onChange={e => setFormData({...formData, hasRelay: e.target.checked})}
-                                    className="rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-blue-500 focus:ring-blue-500/20"
-                                />
-                                <div>
-                                    <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">Has Protection Relay</span>
-                                    <span className="text-[9px] text-gray-400 dark:text-gray-500 block">Enable external relay for overcurrent trip protection</span>
-                                </div>
-                            </label>
-
-                            {formData.hasRelay && (
-                                <div className="space-y-4 pl-6 pt-1 border-l-2 border-blue-500/25">
-                                    {/* Threshold Slider */}
-                                    <div className="space-y-1">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <label className="text-[9px] font-bold text-gray-400 dark:text-gray-555 uppercase tracking-wide">Overcurrent Threshold Limit</label>
-                                            <span className="text-xs font-mono font-bold text-blue-500 dark:text-blue-400">
-                                                {formData.overcurrentThreshold.toFixed(2)} A (~{(220 * formData.overcurrentThreshold).toFixed(0)} W)
-                                            </span>
-                                        </div>
-                                        <input 
-                                            type="range"
-                                            min="0.20"
-                                            max="25.00"
-                                            step="0.01"
-                                            value={formData.overcurrentThreshold}
-                                            onChange={e => setFormData({...formData, overcurrentThreshold: parseFloat(parseFloat(e.target.value).toFixed(2))})}
-                                            className="w-full h-1 bg-gray-200 dark:bg-gray-800 rounded-lg appearance-none cursor-pointer accent-blue-600 dark:accent-blue-500"
-                                        />
-                                        <div className="flex justify-between text-[8px] text-gray-400 font-semibold font-mono">
-                                            <span>0.20 A</span>
-                                            <span>10.00 A</span>
-                                            <span>25.00 A</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Delay Slider */}
-                                    <div className="space-y-1">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <label className="text-[9px] font-bold text-gray-400 dark:text-gray-550 uppercase tracking-wide">Trip Delay (Filter Spikes)</label>
-                                            <span className="text-xs font-mono font-bold text-blue-500 dark:text-blue-400">
-                                                {formData.overcurrentDelay === 0 ? "Instant (Spike)" : `${formData.overcurrentDelay} seconds`}
-                                            </span>
-                                        </div>
-                                        <input 
-                                            type="range"
-                                            min="0"
-                                            max="15"
-                                            step="1"
-                                            value={formData.overcurrentDelay}
-                                            onChange={e => setFormData({...formData, overcurrentDelay: parseInt(e.target.value)})}
-                                            className="w-full h-1 bg-gray-200 dark:bg-gray-800 rounded-lg appearance-none cursor-pointer accent-blue-600 dark:accent-blue-500"
-                                        />
-                                        <div className="flex justify-between text-[8px] text-gray-400 font-semibold font-mono">
-                                            <span>0s (Instant)</span>
-                                            <span>5s</span>
-                                            <span>10s</span>
-                                            <span>15s</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Auto Reconnect */}
-                                    <label className="flex items-center gap-2.5 cursor-pointer pt-1">
-                                        <input 
-                                            type="checkbox" 
-                                            checked={formData.autoReconnect}
-                                            onChange={e => setFormData({...formData, autoReconnect: e.target.checked})}
-                                            className="rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-blue-500 focus:ring-blue-500/20"
-                                        />
-                                        <div>
-                                            <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">Auto-Reconnect Relay</span>
-                                            <span className="text-[9px] text-gray-400 dark:text-gray-500 block">Reconnect relay automatically after cutoff cooldown</span>
-                                        </div>
-                                    </label>
-
-                                    {/* Reconnect Delay */}
-                                    {formData.autoReconnect && (
-                                        <div className="space-y-1 pl-6">
-                                            <div className="flex justify-between items-center mb-1">
-                                                <label className="text-[9px] font-bold text-gray-400 dark:text-gray-550 uppercase tracking-wide">Reconnect Delay Cooldown</label>
-                                                <span className="text-xs font-mono font-bold text-blue-500 dark:text-blue-400">{formData.reconnectDelay} seconds</span>
-                                            </div>
-                                            <input 
-                                                type="range"
-                                                min="5"
-                                                max="120"
-                                                step="5"
-                                                value={formData.reconnectDelay}
-                                                onChange={e => setFormData({...formData, reconnectDelay: parseInt(e.target.value)})}
-                                                className="w-full h-1 bg-gray-200 dark:bg-gray-800 rounded-lg appearance-none cursor-pointer accent-blue-600 dark:accent-blue-500"
-                                            />
-                                            <div className="flex justify-between text-[8px] text-gray-400 font-semibold font-mono">
-                                                <span>5s</span>
-                                                <span>30s</span>
-                                                <span>60s</span>
-                                                <span>120s</span>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="flex gap-2 justify-end">
-                            <button 
-                                onClick={handleCancelEdit} 
-                                disabled={isLoading} 
-                                className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-all cursor-pointer"
-                            >
-                                Cancel
-                            </button>
-                            <button 
-                                onClick={calculateSave} 
-                                disabled={isLoading} 
-                                className="px-5 py-2 text-xs font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-600/20 flex items-center gap-2 transition-all cursor-pointer"
-                            >
-                                {isLoading ? 'Saving...' : <><FaSave /> Update</>}
-                            </button>
-                        </div>
-                    </div>
-                    ) : (
-                    // View Mode Row
-                    <div className="flex items-center justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                            <h4 className="font-bold text-gray-800 dark:text-gray-100 truncate">{device.name}</h4>
-                            <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                                <span className="inline-flex items-center gap-1.5 text-[10px] font-black px-2.5 py-1 rounded-full bg-blue-100/50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 uppercase tracking-tighter">
-                                    <FaMapMarkerAlt size={8} />
-                                    {device.location}
-                                </span>
-                                {device.hasRelay && (
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-100/50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-450 uppercase tracking-tighter" title={`Threshold: ${device.overcurrentThreshold}A, Delay: ${device.overcurrentDelay}s, AutoRec: ${device.autoReconnect ? `${device.reconnectDelay}s` : 'OFF'}`}>
-                                        🛡️ {device.overcurrentThreshold.toFixed(2)}A · {device.overcurrentDelay}s {device.autoReconnect && `· 🔄 ${device.reconnectDelay}s`}
-                                    </span>
-                                )}
-                                <span className="inline-flex items-center gap-1 text-[10px] text-gray-400 font-mono bg-gray-100 dark:bg-gray-900/50 px-2 py-1 rounded-md">
-                                    <FaKey size={8} />
-                                    {device.id.slice(0, 8)}...
-                                </span>
-                            </div>
-                        </div>
-                        <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button 
-                                onClick={() => handleEditClick(device)} 
-                                title="Edit Sensor"
-                                className="p-2.5 text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-xl transition-all cursor-pointer"
-                            >
-                                <FaEdit size={14} />
-                            </button>
-                            <button 
-                                onClick={() => handleDeleteClick(device.id)} 
-                                title="Delete Sensor"
-                                className="p-2.5 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-xl transition-all cursor-pointer"
-                            >
-                                <FaTrash size={14} />
-                            </button>
-                        </div>
-                    </div>
-                    )}
-                </motion.div>
-                ))}
-            </AnimatePresence>
-            
-            {devices.length === 0 && !isAddingMode && (
-                <div className="flex flex-col items-center justify-center py-10 opacity-40">
-                    <FaMicrochip size={40} className="mb-3" />
-                    <p className="text-sm font-medium">No sensors registered yet.</p>
-                </div>
-            )}
-        </div>
-
-        {/* Add New Section */}
-        <div className="relative z-10">
-            {isAddingMode ? (
-                <motion.div 
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="p-5 rounded-2xl bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/10 dark:to-orange-900/10 border border-yellow-200 dark:border-yellow-800/30 overflow-y-auto max-h-[45vh]"
-                >
-                    <div className="flex items-center gap-2 mb-4">
-                        <div className="p-1.5 rounded-lg bg-yellow-500 text-white shadow-sm">
-                            <FaPlus size={10} />
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className={`group relative overflow-hidden p-4 rounded-2xl border transition-all cursor-pointer ${
+                      isActive 
+                        ? 'bg-blue-500/5 dark:bg-blue-500/10 border-blue-500/50 shadow-md shadow-blue-500/5' 
+                        : 'bg-gray-50/50 dark:bg-gray-800/40 border-gray-100 dark:border-gray-700/50 hover:border-blue-200 dark:hover:border-blue-800/30'
+                    }`}
+                    onClick={() => handleEditClick(device)}
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <h4 className={`font-bold truncate ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-800 dark:text-gray-100'}`}>{device.name}</h4>
+                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                          <span className="inline-flex items-center gap-1.5 text-[9px] font-black px-2 py-0.5 rounded bg-blue-100/50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 uppercase">
+                            <FaMapMarkerAlt size={7} />
+                            {device.location}
+                          </span>
+                          {device.hasRelay && (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded bg-emerald-100/50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-450 uppercase">
+                              🛡️ {device.overcurrentThreshold.toFixed(2)}A
+                            </span>
+                          )}
                         </div>
-                        <h4 className="text-sm font-black text-yellow-700 dark:text-yellow-500 uppercase tracking-wider">New Sensor</h4>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleDeleteClick(device.id); }} 
+                          title="Delete Sensor"
+                          className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-all shadow-sm cursor-pointer"
+                        >
+                          <FaTrash size={12} />
+                        </button>
+                      </div>
                     </div>
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-1 gap-3">
-                            <input 
-                                className="w-full px-4 py-2.5 text-sm rounded-xl bg-white/80 dark:bg-gray-950/50 border border-yellow-200 dark:border-yellow-900/30 outline-none focus:ring-2 focus:ring-yellow-500 transition-all placeholder:text-gray-400 text-gray-855 dark:text-white"
-                                placeholder="Sensor Name (e.g. Washing Machine)" 
-                                value={formData.name}
-                                onChange={e => setFormData({...formData, name: e.target.value})}
-                            />
-                            <input 
-                                className="w-full px-4 py-2.5 text-sm rounded-xl bg-white/80 dark:bg-gray-950/50 border border-yellow-200 dark:border-yellow-900/30 outline-none focus:ring-2 focus:ring-yellow-500 transition-all placeholder:text-gray-400 text-gray-855 dark:text-white"
-                                placeholder="Location (e.g. Laundry Area)" 
-                                value={formData.location}
-                                onChange={e => setFormData({...formData, location: e.target.value})}
-                            />
-                        </div>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
 
-                        {/* Relay Configuration Fields for Add Mode */}
-                        <div className="p-3.5 rounded-xl bg-white dark:bg-gray-900/60 border border-yellow-100 dark:border-yellow-950/30 space-y-4">
-                            <label className="flex items-center gap-2.5 cursor-pointer">
-                                <input 
-                                    type="checkbox" 
-                                    checked={formData.hasRelay}
-                                    onChange={e => setFormData({...formData, hasRelay: e.target.checked})}
-                                    className="rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-yellow-500 focus:ring-yellow-500/20"
-                                />
-                                <div>
-                                    <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">Has Protection Relay</span>
-                                    <span className="text-[9px] text-gray-450 dark:text-gray-500 block">Enable external relay for overcurrent trip protection</span>
-                                </div>
-                            </label>
-
-                            {formData.hasRelay && (
-                                <div className="space-y-4 pl-6 pt-1 border-l-2 border-yellow-500/20">
-                                    {/* Threshold Limit */}
-                                    <div className="space-y-1">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <label className="text-[9px] font-bold text-gray-400 dark:text-gray-555 uppercase tracking-wide">Overcurrent Threshold Limit</label>
-                                            <span className="text-xs font-mono font-bold text-yellow-600 dark:text-yellow-500">
-                                                {formData.overcurrentThreshold.toFixed(2)} A (~{(220 * formData.overcurrentThreshold).toFixed(0)} W)
-                                            </span>
-                                        </div>
-                                        <input 
-                                            type="range"
-                                            min="0.20"
-                                            max="25.00"
-                                            step="0.01"
-                                            value={formData.overcurrentThreshold}
-                                            onChange={e => setFormData({...formData, overcurrentThreshold: parseFloat(parseFloat(e.target.value).toFixed(2))})}
-                                            className="w-full h-1 bg-gray-200 dark:bg-gray-800 rounded-lg appearance-none cursor-pointer accent-yellow-500"
-                                        />
-                                        <div className="flex justify-between text-[8px] text-gray-400 font-semibold font-mono">
-                                            <span>0.20 A</span>
-                                            <span>10.00 A</span>
-                                            <span>25.00 A</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Trip Delay */}
-                                    <div className="space-y-1">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <label className="text-[9px] font-bold text-gray-400 dark:text-gray-550 uppercase tracking-wide">Trip Delay (Filter Spikes)</label>
-                                            <span className="text-xs font-mono font-bold text-yellow-600 dark:text-yellow-500">
-                                                {formData.overcurrentDelay === 0 ? "Instant (Spike)" : `${formData.overcurrentDelay} seconds`}
-                                            </span>
-                                        </div>
-                                        <input 
-                                            type="range"
-                                            min="0"
-                                            max="15"
-                                            step="1"
-                                            value={formData.overcurrentDelay}
-                                            onChange={e => setFormData({...formData, overcurrentDelay: parseInt(e.target.value)})}
-                                            className="w-full h-1 bg-gray-250 dark:bg-gray-850 rounded-lg appearance-none cursor-pointer accent-yellow-500"
-                                        />
-                                        <div className="flex justify-between text-[8px] text-gray-400 font-semibold font-mono">
-                                            <span>0s (Instant)</span>
-                                            <span>5s</span>
-                                            <span>10s</span>
-                                            <span>15s</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Auto Reconnect */}
-                                    <label className="flex items-center gap-2.5 cursor-pointer pt-1">
-                                        <input 
-                                            type="checkbox" 
-                                            checked={formData.autoReconnect}
-                                            onChange={e => setFormData({...formData, autoReconnect: e.target.checked})}
-                                            className="rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-yellow-500 focus:ring-yellow-500/20"
-                                        />
-                                        <div>
-                                            <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">Auto-Reconnect Relay</span>
-                                            <span className="text-[9px] text-gray-450 dark:text-gray-500 block">Reconnect relay automatically after cutoff cooldown</span>
-                                        </div>
-                                    </label>
-
-                                    {/* Reconnect Delay */}
-                                    {formData.autoReconnect && (
-                                        <div className="space-y-1 pl-6">
-                                            <div className="flex justify-between items-center mb-1">
-                                                <label className="text-[9px] font-bold text-gray-400 dark:text-gray-550 uppercase tracking-wide">Reconnect Delay Cooldown</label>
-                                                <span className="text-xs font-mono font-bold text-yellow-600 dark:text-yellow-500">{formData.reconnectDelay} seconds</span>
-                                            </div>
-                                            <input 
-                                                type="range"
-                                                min="5"
-                                                max="120"
-                                                step="5"
-                                                value={formData.reconnectDelay}
-                                                onChange={e => setFormData({...formData, reconnectDelay: parseInt(e.target.value)})}
-                                                className="w-full h-1 bg-gray-250 dark:bg-gray-850 rounded-lg appearance-none cursor-pointer accent-yellow-500"
-                                            />
-                                            <div className="flex justify-between text-[8px] text-gray-400 font-semibold font-mono">
-                                                <span>5s</span>
-                                                <span>30s</span>
-                                                <span>60s</span>
-                                                <span>120s</span>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="flex gap-2 justify-end pt-2">
-                            <button 
-                                onClick={handleCancelEdit} 
-                                className="px-5 py-2 text-xs font-bold text-gray-500 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-all cursor-pointer"
-                            >
-                                Cancel
-                            </button>
-                            <button 
-                                onClick={calculateSave} 
-                                disabled={isLoading} 
-                                className="px-6 py-2 text-xs font-bold bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 shadow-lg shadow-yellow-500/20 flex items-center gap-2 transition-all cursor-pointer"
-                            >
-                                {isLoading ? 'Saving...' : <><FaSave /> Save Sensor</>}
-                            </button>
-                        </div>
-                    </div>
-                </motion.div>
-            ) : (
-                <button 
-                    onClick={() => { setIsAddingMode(true); setEditingId(null); setFormData({name:"", location:"", hasRelay: false, overcurrentThreshold: 10.0, overcurrentDelay: 0, autoReconnect: false, reconnectDelay: 30}); }} 
-                    className="group w-full py-4 border-2 border-dashed border-gray-250 dark:border-gray-800 rounded-[1.5rem] text-gray-400 hover:border-blue-450 hover:text-blue-500 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-all flex items-center justify-center gap-3 font-bold text-sm cursor-pointer"
-                >
-                    <div className="p-1 rounded-md bg-gray-100 dark:bg-gray-800 group-hover:bg-blue-500 group-hover:text-white transition-colors">
-                        <FaPlus size={10} />
-                    </div>
-                    Register New Sensor
-                </button>
+            {devices.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12 text-gray-400 dark:text-gray-650">
+                <FaMicrochip size={36} className="mb-2 opacity-40 animate-pulse" />
+                <p className="text-xs font-semibold">No sensors registered yet.</p>
+              </div>
             )}
+          </div>
         </div>
+
+        {/* Right Column: Form Panel (Edit / Add / Blank State) */}
+        <div className="lg:col-span-7 bg-white dark:bg-slate-900/50 border border-gray-150 dark:border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl backdrop-blur-md relative overflow-hidden min-h-[50vh] flex flex-col justify-between">
+          {/* Background Decor */}
+          <div className="absolute top-0 right-0 -mr-24 -mt-24 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+          <div className="absolute bottom-0 left-0 -ml-24 -mb-24 w-72 h-72 bg-yellow-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+          {editingId ? (
+            /* Edit Mode Form */
+            <div className="space-y-5 relative z-10">
+              <div className="flex justify-between items-center border-b border-gray-100 dark:border-slate-800 pb-3 mb-2">
+                <div>
+                  <h3 className="text-sm font-black text-gray-800 dark:text-white uppercase tracking-wider">Configure Sensor Settings</h3>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-550 font-mono mt-0.5">ID: {editingId}</p>
+                </div>
+                <button 
+                  onClick={handleCancelEdit} 
+                  className="p-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-955 dark:hover:bg-gray-900 rounded-lg text-gray-450 dark:text-gray-550 transition-all active:scale-95"
+                >
+                  <FaTimes size={14} />
+                </button>
+              </div>
+
+              {/* Input Fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 dark:text-gray-550 uppercase tracking-wider">Sensor Name</label>
+                  <input 
+                    className="w-full px-4 py-2.5 text-sm rounded-xl bg-white dark:bg-gray-955 border border-gray-200 dark:border-gray-800 focus:border-blue-500 outline-none focus:ring-1 focus:ring-blue-500 transition-all text-gray-855 dark:text-white font-semibold"
+                    placeholder="e.g. Washing Machine" 
+                    value={formData.name}
+                    onChange={e => setFormData({...formData, name: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider">Location</label>
+                  <input 
+                    className="w-full px-4 py-2.5 text-sm rounded-xl bg-white dark:bg-gray-955 border border-gray-200 dark:border-gray-800 focus:border-blue-500 outline-none focus:ring-1 focus:ring-blue-500 transition-all text-gray-855 dark:text-white font-semibold"
+                    placeholder="e.g. Laundry Area" 
+                    value={formData.location}
+                    onChange={e => setFormData({...formData, location: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              {/* Relay Protection Settings Block */}
+              <div className="p-4 rounded-2xl bg-gray-50/50 dark:bg-gray-950/40 border border-gray-100 dark:border-gray-800 space-y-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={formData.hasRelay}
+                    onChange={e => setFormData({...formData, hasRelay: e.target.checked})}
+                    className="rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-blue-500 focus:ring-blue-500/20"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">Has Protection Relay</span>
+                    <span className="text-[9px] text-gray-455 dark:text-gray-500 block">Enable external relay for overcurrent trip protection</span>
+                  </div>
+                </label>
+
+                {formData.hasRelay && (
+                  <div className="space-y-6 pl-6 pt-2 border-l-2 border-blue-500/30 animate-fadeIn">
+                    {/* Threshold Input & Slider */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider">Overcurrent Threshold Limit</label>
+                        <span className="text-[10px] text-blue-500 dark:text-blue-400 font-bold bg-blue-500/5 px-2 py-0.5 rounded-full border border-blue-500/10">
+                          Perkiraan Daya: ~{(220 * formData.overcurrentThreshold).toFixed(0)} Watt
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <input 
+                          type="range"
+                          min="0.20"
+                          max="25.00"
+                          step="0.01"
+                          value={formData.overcurrentThreshold}
+                          onChange={e => setFormData({...formData, overcurrentThreshold: parseFloat(parseFloat(e.target.value).toFixed(2))})}
+                          className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-lg appearance-none cursor-pointer accent-blue-600 dark:accent-blue-500"
+                        />
+                        <div className="flex items-center gap-1 shrink-0">
+                          <input 
+                            type="number"
+                            min="0.20"
+                            max="25.00"
+                            step="0.01"
+                            value={formData.overcurrentThreshold}
+                            onChange={e => {
+                              let val = parseFloat(e.target.value);
+                              if (val > 25.00) val = 25.00;
+                              setFormData({...formData, overcurrentThreshold: isNaN(val) ? 0.20 : val});
+                            }}
+                            className="w-20 px-2 py-1.5 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-xl text-xs font-mono font-bold text-blue-600 dark:text-blue-400 text-center shadow-sm"
+                          />
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 font-mono">A</span>
+                        </div>
+                      </div>
+                      <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-550 font-semibold font-mono">
+                        <span>Min: 0.20 A</span>
+                        <span>Max: 25.00 A</span>
+                      </div>
+                    </div>
+
+                    {/* Delay Input & Slider */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider block">Trip Delay (Filter Spikes)</label>
+                      <div className="flex items-center gap-4">
+                        <input 
+                          type="range"
+                          min="0"
+                          max="15"
+                          step="1"
+                          value={formData.overcurrentDelay}
+                          onChange={e => setFormData({...formData, overcurrentDelay: parseInt(e.target.value)})}
+                          className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-lg appearance-none cursor-pointer accent-blue-600 dark:accent-blue-500"
+                        />
+                        <div className="flex items-center gap-1 shrink-0">
+                          <input 
+                            type="number"
+                            min="0"
+                            max="15"
+                            step="1"
+                            value={formData.overcurrentDelay}
+                            onChange={e => {
+                              let val = parseInt(e.target.value);
+                              if (val > 15) val = 15;
+                              setFormData({...formData, overcurrentDelay: isNaN(val) ? 0 : val});
+                            }}
+                            className="w-20 px-2 py-1.5 bg-white dark:bg-gray-955 border border-gray-200 dark:border-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-xl text-xs font-mono font-bold text-blue-600 dark:text-blue-400 text-center shadow-sm"
+                          />
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 font-mono">detik</span>
+                        </div>
+                      </div>
+                      <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-550 font-semibold font-mono">
+                        <span>0s (Instant Spike Filter)</span>
+                        <span>Max: 15s</span>
+                      </div>
+                    </div>
+
+                    {/* Auto Reconnect */}
+                    <div className="space-y-4 pt-2 border-t border-gray-150 dark:border-gray-850">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={formData.autoReconnect}
+                          onChange={e => setFormData({...formData, autoReconnect: e.target.checked})}
+                          className="rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-blue-500 focus:ring-blue-500/20"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">Auto-Reconnect Relay</span>
+                          <span className="text-[9px] text-gray-405 dark:text-gray-500 block">Reconnect relay automatically after cutoff cooldown</span>
+                        </div>
+                      </label>
+
+                      {/* Reconnect Delay */}
+                      {formData.autoReconnect ? (
+                        <div className="space-y-2 pl-6 animate-fadeIn">
+                          <label className="text-[10px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider block">Reconnect Delay Cooldown</label>
+                          <div className="flex items-center gap-4">
+                            <input 
+                              type="range"
+                              min="5"
+                              max="120"
+                              step="1"
+                              value={formData.reconnectDelay}
+                              onChange={e => setFormData({...formData, reconnectDelay: parseInt(e.target.value)})}
+                              className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-lg appearance-none cursor-pointer accent-blue-600 dark:accent-blue-500"
+                            />
+                            <div className="flex items-center gap-1 shrink-0">
+                              <input 
+                                type="number"
+                                min="5"
+                                max="120"
+                                step="1"
+                                value={formData.reconnectDelay}
+                                onChange={e => {
+                                  let val = parseInt(e.target.value);
+                                  if (val > 120) val = 120;
+                                  setFormData({...formData, reconnectDelay: isNaN(val) ? 5 : val});
+                                }}
+                                className="w-20 px-2 py-1.5 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-xl text-xs font-mono font-bold text-blue-600 dark:text-blue-400 text-center shadow-sm"
+                              />
+                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 font-mono">detik</span>
+                            </div>
+                          </div>
+                          <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-550 font-semibold font-mono">
+                            <span>Min: 5s</span>
+                            <span>Max: 120s</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="pl-6 py-2 px-3 bg-rose-500/5 border border-rose-500/10 rounded-xl text-[10px] text-rose-500 dark:text-rose-455 font-medium leading-relaxed">
+                          ⚠️ <b>Manual Reconnect:</b> Sirkuit akan tetap terputus (mati) setelah relay trip/putus. Anda harus menekan tombol "Reset & Reconnect (ON)" secara manual di dashboard utama untuk menyalakannya kembali.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Save & Cancel Buttons */}
+              <div className="flex gap-3 justify-end pt-4 border-t border-gray-100 dark:border-slate-800">
+                <button 
+                  onClick={handleCancelEdit} 
+                  disabled={isLoading} 
+                  className="px-5 py-2.5 text-xs font-bold text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-955 rounded-xl transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={calculateSave} 
+                  disabled={isLoading} 
+                  className="px-6 py-2.5 text-xs font-black bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-600/20 flex items-center gap-2 transition-all cursor-pointer active:scale-95"
+                >
+                  {isLoading ? 'Saving...' : <><FaSave /> Save Changes</>}
+                </button>
+              </div>
+            </div>
+          ) : isAddingMode ? (
+            /* Register Mode Form */
+            <div className="space-y-5 relative z-10 animate-fadeIn">
+              <div className="flex justify-between items-center border-b border-gray-100 dark:border-slate-800 pb-3 mb-2">
+                <div>
+                  <h3 className="text-sm font-black text-yellow-600 dark:text-yellow-500 uppercase tracking-wider flex items-center gap-2">
+                    <FaPlus size={10} /> Register New Sensor
+                  </h3>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono mt-0.5">Add a new PZEM metering node</p>
+                </div>
+                <button 
+                  onClick={handleCancelEdit} 
+                  className="p-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-955 dark:hover:bg-gray-900 rounded-lg text-gray-450 dark:text-gray-550 transition-all active:scale-95"
+                >
+                  <FaTimes size={14} />
+                </button>
+              </div>
+
+              {/* Input Fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 dark:text-gray-550 uppercase tracking-wider">Sensor Name</label>
+                  <input 
+                    className="w-full px-4 py-2.5 text-sm rounded-xl bg-white dark:bg-gray-955 border border-yellow-200 dark:border-yellow-900/30 focus:border-yellow-500 outline-none focus:ring-1 focus:ring-yellow-500 transition-all text-gray-855 dark:text-white font-semibold"
+                    placeholder="e.g. Washing Machine" 
+                    value={formData.name}
+                    onChange={e => setFormData({...formData, name: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider">Location</label>
+                  <input 
+                    className="w-full px-4 py-2.5 text-sm rounded-xl bg-white dark:bg-gray-955 border border-yellow-200 dark:border-yellow-900/30 focus:border-yellow-500 outline-none focus:ring-1 focus:ring-yellow-500 transition-all text-gray-855 dark:text-white font-semibold"
+                    placeholder="e.g. Laundry Area" 
+                    value={formData.location}
+                    onChange={e => setFormData({...formData, location: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              {/* Relay Protection Settings Block */}
+              <div className="p-4 rounded-2xl bg-yellow-50/10 dark:bg-yellow-950/10 border border-yellow-200/20 dark:border-yellow-800/20 space-y-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={formData.hasRelay}
+                    onChange={e => setFormData({...formData, hasRelay: e.target.checked})}
+                    className="rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-yellow-550 focus:ring-yellow-550/20"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">Has Protection Relay</span>
+                    <span className="text-[9px] text-gray-450 dark:text-gray-500 block">Enable external relay for overcurrent trip protection</span>
+                  </div>
+                </label>
+
+                {formData.hasRelay && (
+                  <div className="space-y-6 pl-6 pt-2 border-l-2 border-yellow-500/30 animate-fadeIn">
+                    {/* Threshold Input & Slider */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider">Overcurrent Threshold Limit</label>
+                        <span className="text-[10px] text-yellow-600 dark:text-yellow-500 font-bold bg-yellow-500/5 px-2 py-0.5 rounded-full border border-yellow-500/10">
+                          Perkiraan Daya: ~{(220 * formData.overcurrentThreshold).toFixed(0)} Watt
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <input 
+                          type="range"
+                          min="0.20"
+                          max="25.00"
+                          step="0.01"
+                          value={formData.overcurrentThreshold}
+                          onChange={e => setFormData({...formData, overcurrentThreshold: parseFloat(parseFloat(e.target.value).toFixed(2))})}
+                          className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                        />
+                        <div className="flex items-center gap-1 shrink-0">
+                          <input 
+                            type="number"
+                            min="0.20"
+                            max="25.00"
+                            step="0.01"
+                            value={formData.overcurrentThreshold}
+                            onChange={e => {
+                              let val = parseFloat(e.target.value);
+                              if (val > 25.00) val = 25.00;
+                              setFormData({...formData, overcurrentThreshold: isNaN(val) ? 0.20 : val});
+                            }}
+                            className="w-20 px-2 py-1.5 bg-white dark:bg-gray-955 border border-yellow-200 dark:border-yellow-900/30 focus:border-yellow-500 focus:outline-none focus:ring-1 focus:ring-yellow-500 rounded-xl text-xs font-mono font-bold text-yellow-600 dark:text-yellow-500 text-center shadow-sm"
+                          />
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 font-mono">A</span>
+                        </div>
+                      </div>
+                      <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-550 font-semibold font-mono">
+                        <span>Min: 0.20 A</span>
+                        <span>Max: 25.00 A</span>
+                      </div>
+                    </div>
+
+                    {/* Delay Input & Slider */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider block">Trip Delay (Filter Spikes)</label>
+                      <div className="flex items-center gap-4">
+                        <input 
+                          type="range"
+                          min="0"
+                          max="15"
+                          step="1"
+                          value={formData.overcurrentDelay}
+                          onChange={e => setFormData({...formData, overcurrentDelay: parseInt(e.target.value)})}
+                          className="flex-1 h-1.5 bg-gray-255 dark:bg-gray-855 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                        />
+                        <div className="flex items-center gap-1 shrink-0">
+                          <input 
+                            type="number"
+                            min="0"
+                            max="15"
+                            step="1"
+                            value={formData.overcurrentDelay}
+                            onChange={e => {
+                              let val = parseInt(e.target.value);
+                              if (val > 15) val = 15;
+                              setFormData({...formData, overcurrentDelay: isNaN(val) ? 0 : val});
+                            }}
+                            className="w-20 px-2 py-1.5 bg-white dark:bg-gray-955 border border-yellow-200 dark:border-yellow-900/30 focus:border-yellow-500 focus:outline-none focus:ring-1 focus:ring-yellow-500 rounded-xl text-xs font-mono font-bold text-yellow-600 dark:text-yellow-500 text-center shadow-sm"
+                          />
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 font-mono">detik</span>
+                        </div>
+                      </div>
+                      <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-550 font-semibold font-mono">
+                        <span>0s (Instant Spike Filter)</span>
+                        <span>Max: 15s</span>
+                      </div>
+                    </div>
+
+                    {/* Auto Reconnect */}
+                    <div className="space-y-4 pt-2 border-t border-gray-150 dark:border-gray-855">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={formData.autoReconnect}
+                          onChange={e => setFormData({...formData, autoReconnect: e.target.checked})}
+                          className="rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-yellow-500 focus:ring-yellow-500/20"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">Auto-Reconnect Relay</span>
+                          <span className="text-[9px] text-gray-455 dark:text-gray-500 block">Reconnect relay automatically after cutoff cooldown</span>
+                        </div>
+                      </label>
+
+                      {/* Reconnect Delay */}
+                      {formData.autoReconnect ? (
+                        <div className="space-y-2 pl-6 animate-fadeIn">
+                          <label className="text-[10px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider block">Reconnect Delay Cooldown</label>
+                          <div className="flex items-center gap-4">
+                            <input 
+                              type="range"
+                              min="5"
+                              max="120"
+                              step="1"
+                              value={formData.reconnectDelay}
+                              onChange={e => setFormData({...formData, reconnectDelay: parseInt(e.target.value)})}
+                              className="flex-1 h-1.5 bg-gray-250 dark:bg-gray-855 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                            />
+                            <div className="flex items-center gap-1 shrink-0">
+                              <input 
+                                type="number"
+                                min="5"
+                                max="120"
+                                step="1"
+                                value={formData.reconnectDelay}
+                                onChange={e => {
+                                  let val = parseInt(e.target.value);
+                                  if (val > 120) val = 120;
+                                  setFormData({...formData, reconnectDelay: isNaN(val) ? 5 : val});
+                                }}
+                                className="w-20 px-2 py-1.5 bg-white dark:bg-gray-955 border border-yellow-200 dark:border-yellow-900/30 focus:border-yellow-500 focus:outline-none focus:ring-1 focus:ring-yellow-500 rounded-xl text-xs font-mono font-bold text-yellow-600 dark:text-yellow-500 text-center shadow-sm"
+                              />
+                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 font-mono">detik</span>
+                            </div>
+                          </div>
+                          <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-550 font-semibold font-mono">
+                            <span>Min: 5s</span>
+                            <span>Max: 120s</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="pl-6 py-2 px-3 bg-rose-500/5 border border-rose-500/10 rounded-xl text-[10px] text-rose-500 dark:text-rose-455 font-medium leading-relaxed">
+                          ⚠️ <b>Manual Reconnect:</b> Sirkuit akan tetap terputus (mati) setelah relay trip/putus. Anda harus menekan tombol "Reset & Reconnect (ON)" secara manual di dashboard utama untuk menyalakannya kembali.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Register Buttons */}
+              <div className="flex gap-3 justify-end pt-4 border-t border-gray-150 dark:border-slate-800">
+                <button 
+                  onClick={handleCancelEdit} 
+                  className="px-5 py-2.5 text-xs font-bold text-gray-500 dark:text-gray-450 hover:bg-gray-50 dark:hover:bg-gray-955 rounded-xl transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={calculateSave} 
+                  disabled={isLoading} 
+                  className="px-6 py-2.5 text-xs font-black bg-yellow-500 hover:bg-yellow-600 text-white rounded-xl shadow-lg shadow-yellow-500/20 flex items-center gap-2 transition-all cursor-pointer active:scale-95"
+                >
+                  {isLoading ? 'Registering...' : <><FaPlus /> Register Sensor</>}
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Blank State Mode (Nothing selected) */
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-8 relative z-10 text-gray-400 dark:text-gray-600 min-h-[40vh]">
+              <div className="p-4 bg-gray-50 dark:bg-gray-950 border border-gray-100 dark:border-gray-900 rounded-3xl mb-4 shrink-0 shadow-inner">
+                <FaMicrochip size={48} className="text-blue-500/60 dark:text-blue-400/40 animate-pulse" />
+              </div>
+              <h4 className="text-base font-black text-gray-750 dark:text-slate-200">No Sensor Active</h4>
+              <p className="text-xs text-gray-450 dark:text-gray-500 max-w-sm mt-1 mb-6 leading-relaxed">
+                Pilih salah satu sensor dari daftar di sebelah kiri untuk mengubah konfigurasinya, atau daftarkan sensor baru.
+              </p>
+              <button 
+                onClick={() => { 
+                  setIsAddingMode(true); 
+                  setEditingId(null); 
+                  setFormData({name:"", location:"", hasRelay: false, overcurrentThreshold: 10.0, overcurrentDelay: 0, autoReconnect: false, reconnectDelay: 30}); 
+                }} 
+                className="px-5 py-2.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all shadow-lg shadow-blue-600/10 cursor-pointer active:scale-95 flex items-center gap-2"
+              >
+                <FaPlus size={10} /> Daftarkan Sensor Baru
+              </button>
+            </div>
+          )}
+        </div>
+
       </div>
 
       <ConfirmationModal
