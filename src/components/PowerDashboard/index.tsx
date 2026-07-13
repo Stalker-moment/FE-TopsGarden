@@ -1115,8 +1115,11 @@ const PowerDashboard: React.FC = () => {
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto p-4 md:p-8">
-        
-        {/* Header */}
+        {isSettingsOpen ? (
+          <DeviceSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} devices={devices} onDevicesUpdate={fetchDevices} apiUrl={API_URL} />
+        ) : (
+          <>
+            {/* Header */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6">
           <div className="w-full lg:w-auto">
             <h1 className="text-3xl md:text-4xl font-black text-gray-800 dark:text-white flex items-center gap-3">
@@ -1173,7 +1176,6 @@ const PowerDashboard: React.FC = () => {
         </div>
 
         {/* Modals */}
-        <DeviceSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} devices={devices} onDevicesUpdate={fetchDevices} apiUrl={API_URL} />
         <ConfirmationModal isOpen={isResetConfirmOpen} onClose={() => setIsResetConfirmOpen(false)} onConfirm={confirmResetEnergy} title="Reset Energy Counter?" message="Are you sure you want to reset the energy (kWh) counter for this device? This action cannot be undone." confirmText="Yes, Reset" isDanger={true} />
 
         {/* Realtime Cards */}
@@ -2311,7 +2313,8 @@ const PowerDashboard: React.FC = () => {
 
         {/* Render Fullscreen Modal via Portal at root DOM */}
         {renderFullscreenModal()}
-
+          </>
+        )}
       </div>
     </div>
   );

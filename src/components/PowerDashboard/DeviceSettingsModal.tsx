@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { FaTimes, FaPlus, FaTrash, FaEdit, FaSave, FaMicrochip, FaMapMarkerAlt, FaKey } from "react-icons/fa";
+import { FaTimes, FaPlus, FaTrash, FaEdit, FaSave, FaMicrochip, FaMapMarkerAlt, FaKey, FaArrowLeft } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import { PzemDevice } from "@/types/pzem";
 import ConfirmationModal from "./ConfirmationModal";
@@ -150,43 +150,35 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onClose}
-        className="absolute inset-0 bg-black/60 backdrop-blur-md"
-      />
+    <div className="w-full animate-fadeIn space-y-6 relative z-10">
       
-      {/* Modal Content */}
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.9, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="relative w-full max-w-lg rounded-[2rem] bg-white/90 dark:bg-gray-900/90 backdrop-blur-2xl p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.3)] border border-white/40 dark:border-gray-800/40 max-h-[85vh] flex flex-col"
-      >
-        {/* Background Decor */}
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-48 h-48 bg-yellow-500/10 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="flex justify-between items-center mb-6 relative z-10">
-          <div>
-            <h2 className="text-2xl font-black text-gray-800 dark:text-white flex items-center gap-3">
-              <span className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400">
-                <FaMicrochip />
-              </span>
-              Sensors
-            </h2>
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mt-1 uppercase tracking-widest">Management</p>
-          </div>
-          <button 
-            onClick={onClose} 
-            className="p-2.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-all cursor-pointer"
-          >
-            <FaTimes size={18} />
-          </button>
+      {/* Header with back button */}
+      <div className="flex items-center gap-4 mb-6">
+        <button 
+          onClick={onClose}
+          className="p-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-900/60 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-xl transition-all cursor-pointer flex items-center justify-center active:scale-95 shadow-sm border border-gray-200 dark:border-gray-800"
+          title="Back to Dashboard"
+        >
+          <FaArrowLeft size={16} />
+        </button>
+        <div>
+          <h2 className="text-2xl font-black text-gray-850 dark:text-white flex items-center gap-3">
+            <span className="p-2 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-lg">
+              <FaMicrochip size={16} />
+            </span>
+            Power Monitoring Sensors
+          </h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Configure safety thresholds, trip delays, auto-reconnection cooldowns, and register new sensors
+          </p>
         </div>
+      </div>
+
+      {/* Main Settings Content Card (Full Width) */}
+      <div className="w-full bg-white dark:bg-slate-900/50 border border-gray-150 dark:border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl backdrop-blur-md relative overflow-hidden">
+        {/* Background Decor */}
+        <div className="absolute top-0 right-0 -mr-24 -mt-24 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 -ml-24 -mb-24 w-72 h-72 bg-yellow-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
         {/* List of Devices */}
         <div className="flex-1 overflow-y-auto pr-2 space-y-4 mb-6 custom-scrollbar relative z-10">
@@ -248,22 +240,24 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                                     {/* Threshold Slider */}
                                     <div className="space-y-1">
                                         <div className="flex justify-between items-center mb-1">
-                                            <label className="text-[9px] font-bold text-gray-400 dark:text-gray-550 uppercase tracking-wide">Overcurrent Threshold Limit</label>
-                                            <span className="text-xs font-mono font-bold text-blue-500 dark:text-blue-400">{formData.overcurrentThreshold.toFixed(1)} A</span>
+                                            <label className="text-[9px] font-bold text-gray-400 dark:text-gray-555 uppercase tracking-wide">Overcurrent Threshold Limit</label>
+                                            <span className="text-xs font-mono font-bold text-blue-500 dark:text-blue-400">
+                                                {formData.overcurrentThreshold.toFixed(2)} A (~{(220 * formData.overcurrentThreshold).toFixed(0)} W)
+                                            </span>
                                         </div>
                                         <input 
                                             type="range"
-                                            min="0.5"
-                                            max="25.0"
-                                            step="0.5"
+                                            min="0.20"
+                                            max="25.00"
+                                            step="0.01"
                                             value={formData.overcurrentThreshold}
-                                            onChange={e => setFormData({...formData, overcurrentThreshold: parseFloat(e.target.value)})}
+                                            onChange={e => setFormData({...formData, overcurrentThreshold: parseFloat(parseFloat(e.target.value).toFixed(2))})}
                                             className="w-full h-1 bg-gray-200 dark:bg-gray-800 rounded-lg appearance-none cursor-pointer accent-blue-600 dark:accent-blue-500"
                                         />
                                         <div className="flex justify-between text-[8px] text-gray-400 font-semibold font-mono">
-                                            <span>0.5 A</span>
-                                            <span>10.0 A</span>
-                                            <span>25.0 A</span>
+                                            <span>0.20 A</span>
+                                            <span>10.00 A</span>
+                                            <span>25.00 A</span>
                                         </div>
                                     </div>
 
@@ -363,7 +357,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                                 </span>
                                 {device.hasRelay && (
                                     <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-100/50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-450 uppercase tracking-tighter" title={`Threshold: ${device.overcurrentThreshold}A, Delay: ${device.overcurrentDelay}s, AutoRec: ${device.autoReconnect ? `${device.reconnectDelay}s` : 'OFF'}`}>
-                                        🛡️ {device.overcurrentThreshold.toFixed(1)}A · {device.overcurrentDelay}s {device.autoReconnect && `· 🔄 ${device.reconnectDelay}s`}
+                                        🛡️ {device.overcurrentThreshold.toFixed(2)}A · {device.overcurrentDelay}s {device.autoReconnect && `· 🔄 ${device.reconnectDelay}s`}
                                     </span>
                                 )}
                                 <span className="inline-flex items-center gap-1 text-[10px] text-gray-400 font-mono bg-gray-100 dark:bg-gray-900/50 px-2 py-1 rounded-md">
@@ -452,22 +446,24 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                                     {/* Threshold Limit */}
                                     <div className="space-y-1">
                                         <div className="flex justify-between items-center mb-1">
-                                            <label className="text-[9px] font-bold text-gray-400 dark:text-gray-550 uppercase tracking-wide">Overcurrent Threshold Limit</label>
-                                            <span className="text-xs font-mono font-bold text-yellow-600 dark:text-yellow-500">{formData.overcurrentThreshold.toFixed(1)} A</span>
+                                            <label className="text-[9px] font-bold text-gray-400 dark:text-gray-555 uppercase tracking-wide">Overcurrent Threshold Limit</label>
+                                            <span className="text-xs font-mono font-bold text-yellow-600 dark:text-yellow-500">
+                                                {formData.overcurrentThreshold.toFixed(2)} A (~{(220 * formData.overcurrentThreshold).toFixed(0)} W)
+                                            </span>
                                         </div>
                                         <input 
                                             type="range"
-                                            min="0.5"
-                                            max="25.0"
-                                            step="0.5"
+                                            min="0.20"
+                                            max="25.00"
+                                            step="0.01"
                                             value={formData.overcurrentThreshold}
-                                            onChange={e => setFormData({...formData, overcurrentThreshold: parseFloat(e.target.value)})}
+                                            onChange={e => setFormData({...formData, overcurrentThreshold: parseFloat(parseFloat(e.target.value).toFixed(2))})}
                                             className="w-full h-1 bg-gray-200 dark:bg-gray-800 rounded-lg appearance-none cursor-pointer accent-yellow-500"
                                         />
                                         <div className="flex justify-between text-[8px] text-gray-400 font-semibold font-mono">
-                                            <span>0.5 A</span>
-                                            <span>10.0 A</span>
-                                            <span>25.0 A</span>
+                                            <span>0.20 A</span>
+                                            <span>10.00 A</span>
+                                            <span>25.00 A</span>
                                         </div>
                                     </div>
 
@@ -567,7 +563,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                 </button>
             )}
         </div>
-      </motion.div>
+      </div>
 
       <ConfirmationModal
         isOpen={!!deletingId}

@@ -23,7 +23,8 @@ import {
   Settings,
   Trash2,
   Plus,
-  X
+  X,
+  ArrowLeft
 } from 'lucide-react';
 import { ServerBatteryInfo } from '@/types/pzem';
 import { UpsDevice, UpsLog, UpsConfig } from '@/types/ups';
@@ -738,9 +739,10 @@ void loop() {
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto p-4 md:p-8">
-        
-        {/* Header (Senada dengan PZEM Header layout) */}
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6">
+        {!isSettingsOpen && (
+          <>
+            {/* Header (Senada dengan PZEM Header layout) */}
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6">
           <div className="w-full lg:w-auto">
             <h1 className="text-3xl md:text-4xl font-black text-gray-800 dark:text-white flex items-center gap-3">
               <Server className="text-cyan-500" />
@@ -1148,40 +1150,39 @@ void loop() {
           </div>
         )}
 
-      </div>
+          </>
+        )}
 
       {/* Settings Modal (Senada dengan PZEM Settings dialog style) */}
-      <AnimatePresence>
-        {isSettingsOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            {/* Modal backdrop */}
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+      {isSettingsOpen && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Header with back button */}
+          <div className="flex items-center gap-4 mb-8">
+            <button 
               onClick={() => setIsSettingsOpen(false)}
-              className="absolute inset-0 bg-gray-900/50 dark:bg-[#060810]/70 backdrop-blur-sm"
-            />
-
-            {/* Modal content container */}
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[2rem] p-6 md:p-8 shadow-2xl z-10 text-gray-850 dark:text-slate-100 select-none"
+              className="p-2.5 bg-gray-100 hover:bg-gray-250 dark:bg-gray-900/60 dark:hover:bg-gray-800/80 text-gray-600 dark:text-gray-300 rounded-xl transition-all cursor-pointer shadow-sm border border-gray-250 dark:border-gray-855 flex items-center justify-center active:scale-95"
+              title="Back to Dashboard"
             >
-              {/* Modal close icon */}
-              <button 
-                onClick={() => setIsSettingsOpen(false)}
-                className="absolute top-5 right-5 text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-
-              <h2 className="text-xl font-black text-gray-800 dark:text-white flex items-center gap-2 mb-6">
-                <Settings size={20} className="text-cyan-500" />
+              <ArrowLeft size={18} />
+            </button>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-black text-gray-855 dark:text-white flex items-center gap-3">
+                <span className="p-2 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 rounded-lg">
+                  <Settings size={20} />
+                </span>
                 UPS Hardware Configuration
-              </h2>
+              </h1>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {isAddingMode ? "Register and set up a new smart UPS sensor grid" : `Configure active hardware components for ${settingsName || selectedDeviceId}`}
+              </p>
+            </div>
+          </div>
+
+          {/* Settings Content Card (Full Width) */}
+          <div className="w-full bg-white dark:bg-slate-900/50 border border-gray-150 dark:border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl backdrop-blur-md relative overflow-hidden text-gray-855 dark:text-slate-100">
+            {/* Background Decor */}
+            <div className="absolute top-0 right-0 -mr-24 -mt-24 w-72 h-72 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+            <div className="absolute bottom-0 left-0 -ml-24 -mb-24 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
               {/* Mode toggles */}
               <div className="flex items-center gap-4 mb-6 border-b border-gray-100 dark:border-gray-800 pb-4">
@@ -1572,11 +1573,11 @@ void loop() {
                 >
                   {isSubmitting ? 'Saving...' : isAddingMode ? 'Register Device' : 'Save Configuration'}
                 </button>
-              </div>
-            </motion.div>
+            </div>
           </div>
-        )}
-      </AnimatePresence>
+        </div>
+      )}
+      </div>
 
       {/* Footer Status Bar (Senada dengan PZEM footer) */}
       <footer className="mt-12 pt-6 border-t border-gray-200 dark:border-gray-800/80 flex flex-col md:flex-row justify-between items-center gap-4 text-gray-400 dark:text-gray-500 relative z-10">
