@@ -109,8 +109,8 @@ const PowerDashboard: React.FC = () => {
   const [realtimeData, setRealtimeData] = useState<PzemData | null>(null);
   const [status, setStatus] = useState<"ONLINE" | "OFFLINE">("OFFLINE");
   const [wsStatus, setWsStatus] = useState<"CONNECTED" | "DISCONNECTED">("DISCONNECTED");
-  const [deviceLastSeen, setDeviceLastSeen] = useState<number | null>(null);
-  const [deviceStatusTick, setDeviceStatusTick] = useState(0);
+  const [deviceIsOnline, setDeviceIsOnline] = useState<boolean>(false);
+  const [deviceLastUpdateStr, setDeviceLastUpdateStr] = useState<string | null>(null);
   const [chartData, setChartData] = useState<PzemLog[]>([]);
   const [recentLogs, setRecentLogs] = useState<PzemLog[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -390,7 +390,7 @@ const PowerDashboard: React.FC = () => {
                   createdAt: new Date().toISOString()
                 });
                 setStatus("ONLINE");
-                setDeviceLastSeen(Date.now());
+                setDeviceIsOnline(true);
 
                 const now = Date.now();
                 if (now - lastHeavyUpdate.current > 3000) {
@@ -417,7 +417,13 @@ const PowerDashboard: React.FC = () => {
                 if (current.data) {
                   setRealtimeData({ id: current.id, ...current.data, createdAt: current.lastUpdate || new Date().toISOString() });
                   setStatus("ONLINE");
-                  setDeviceLastSeen(Date.now());
+                  // Read isOnline and lastUpdate from backend payload
+                  setDeviceIsOnline(current.isOnline === true);
+                  if (current.lastUpdate) {
+                    setDeviceLastUpdateStr(new Date(current.lastUpdate).toLocaleTimeString('id-ID', {
+                      timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit'
+                    }));
+                  }
                   
                   const now = Date.now();
                   if (now - lastHeavyUpdate.current > 3000) {
@@ -438,16 +444,10 @@ const PowerDashboard: React.FC = () => {
       } catch (e) { console.error("WS Parse Error", e); }
     };
     ws.onopen = () => setWsStatus("CONNECTED");
-    ws.onerror = () => { setStatus("OFFLINE"); setWsStatus("DISCONNECTED"); };
-    ws.onclose = () => { setStatus("OFFLINE"); setWsStatus("DISCONNECTED"); };
+    ws.onerror = () => { setStatus("OFFLINE"); setWsStatus("DISCONNECTED"); setDeviceIsOnline(false); };
+    ws.onclose = () => { setStatus("OFFLINE"); setWsStatus("DISCONNECTED"); setDeviceIsOnline(false); };
     return () => ws.close();
   }, [selectedDeviceId]);
-
-  // Tick every 5s to refresh device staleness label
-  useEffect(() => {
-    const id = setInterval(() => setDeviceStatusTick(t => t + 1), 5000);
-    return () => clearInterval(id);
-  }, []);
 
   // 4. Fetch kWh Usage Chart data
   const fetchUsageData = useCallback(async () => {
@@ -864,20 +864,10 @@ const PowerDashboard: React.FC = () => {
   const usageBarColorsKey = (usageBarColors || []).join(",");
   const usageCategoriesKey = usageChartCategories.join(",");
 
-  // Device / WS status derived values — recomputed every 5s via deviceStatusTick
+  // Device / WS status derived values — driven by backend isOnline flag
   const wsConnected = wsStatus === "CONNECTED";
-  const { deviceOnline, agoSec, agoLabel } = useMemo(() => {
-    const STALE_MS = 30_000;
-    const nowMs = Date.now();
-    const agoMs = deviceLastSeen ? nowMs - deviceLastSeen : null;
-    const online = agoMs !== null && agoMs < STALE_MS;
-    const sec = agoMs !== null ? Math.round(agoMs / 1000) : null;
-    const label = sec === null
-      ? 'Belum ada data'
-      : sec < 60 ? `${sec}s lalu` : `${Math.round(sec / 60)}m lalu`;
-    return { deviceOnline: online, agoSec: sec, agoLabel: label };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deviceLastSeen, deviceStatusTick]);
+  const deviceOnline = deviceIsOnline;
+  const agoLabel = deviceLastUpdateStr ? deviceLastUpdateStr : null;
 
   // kWh Chart Options
   const usageChartOptions: ApexOptions = useMemo(() => ({
@@ -1386,8 +1376,8 @@ const PowerDashboard: React.FC = () => {
               {selectedDeviceId !== 'all' && (
                 <div
                   title={deviceOnline
-                    ? `Alat mengirim data ${agoLabel}`
-                    : agoSec === null ? 'Alat belum pernah mengirim data' : `Data terakhir ${agoLabel} — kemungkinan offline`
+                    ? `Data terakhir dari alat: ${agoLabel ?? '—'}`
+                    : agoLabel ? `Terakhir: ${agoLabel} — kemungkinan offline` : 'Alat belum pernah mengirim data'
                   }
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold shadow-sm transition-all duration-300 ${
                     deviceOnline
@@ -1401,7 +1391,7 @@ const PowerDashboard: React.FC = () => {
                     deviceOnline ? 'bg-blue-500 animate-pulse' : 'bg-orange-400'
                   }`} />
                   <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 hidden md:inline">
-                    {agoSec !== null ? agoLabel : '—'}
+                    {agoLabel ?? '—'}
                   </span>
                 </div>
               )}
