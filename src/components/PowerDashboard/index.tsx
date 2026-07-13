@@ -377,17 +377,40 @@ const PowerDashboard: React.FC = () => {
                 setStatus("ONLINE");
                 setDeviceIsOnline(true);
 
-                // Use aggregated logs/chart from first available active device (for "all" view)
-                const firstWithLogs = activeDevs.find((d: any) => d.logs);
-                if (firstWithLogs?.logs) setRecentLogs(firstWithLogs.logs);
-                const firstWithChart = activeDevs.find((d: any) => d.chart);
-                if (firstWithChart?.chart) setChartData(firstWithChart.chart);
+                // Aggregate recent logs from ALL devices — tag each log with device name, sort by time, top 20
+                const allLogs = message.flatMap((d: any) =>
+                  (d.logs || []).map((l: any) => ({ ...l, _deviceName: d.name }))
+                );
+                allLogs.sort((a: any, b: any) =>
+                  new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                );
+                setRecentLogs(allLogs.slice(0, 20));
+
+                // Aggregate chart: merge all devices' chart data, sort by time, last 50
+                const allChart = message.flatMap((d: any) => d.chart || []);
+                allChart.sort((a: any, b: any) =>
+                  new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+                );
+                setChartData(allChart.slice(-50));
+
+                // Aggregate outage logs from ALL devices — tag with device name, sort by time, top 10
+                const allOutage = message.flatMap((d: any) =>
+                  (d.outageLogs || []).map((o: any) => ({ ...o, _deviceName: d.name }))
+                );
+                allOutage.sort((a: any, b: any) =>
+                  new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+                );
+                setOutageLogs(allOutage.slice(0, 10));
+                setOutageTotal(message.reduce((sum: number, d: any) => sum + (d.outageTotal || 0), 0));
               } else {
                 setRealtimeData(null);
                 setStatus("OFFLINE");
                 setRecentLogs([]);
                 setChartData([]);
+                setOutageLogs([]);
+                setOutageTotal(0);
               }
+
             } else {
               const current = message.find((d: any) => d.id === selectedDeviceId);
               if (current) {
