@@ -1160,13 +1160,13 @@ void loop() {
           <div className="flex items-center gap-4 mb-8">
             <button 
               onClick={() => setIsSettingsOpen(false)}
-              className="p-2.5 bg-gray-100 hover:bg-gray-250 dark:bg-gray-900/60 dark:hover:bg-gray-800/80 text-gray-600 dark:text-gray-300 rounded-xl transition-all cursor-pointer shadow-sm border border-gray-250 dark:border-gray-855 flex items-center justify-center active:scale-95"
+              className="p-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-900/60 dark:hover:bg-gray-800/80 text-gray-600 dark:text-gray-300 rounded-xl transition-all cursor-pointer shadow-sm border border-gray-200 dark:border-gray-800 flex items-center justify-center active:scale-95"
               title="Back to Dashboard"
             >
               <ArrowLeft size={18} />
             </button>
             <div>
-              <h1 className="text-2xl md:text-3xl font-black text-gray-855 dark:text-white flex items-center gap-3">
+              <h1 className="text-2xl md:text-3xl font-black text-gray-800 dark:text-white flex items-center gap-3">
                 <span className="p-2 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 rounded-lg">
                   <Settings size={20} />
                 </span>
@@ -1179,7 +1179,7 @@ void loop() {
           </div>
 
           {/* Settings Content Card (Full Width) */}
-          <div className="w-full bg-white dark:bg-slate-900/50 border border-gray-150 dark:border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl backdrop-blur-md relative overflow-hidden text-gray-855 dark:text-slate-100">
+          <div className="w-full bg-white dark:bg-slate-900/50 border border-gray-150 dark:border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl backdrop-blur-md relative overflow-hidden text-gray-800 dark:text-slate-100">
             {/* Background Decor */}
             <div className="absolute top-0 right-0 -mr-24 -mt-24 w-72 h-72 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
             <div className="absolute bottom-0 left-0 -ml-24 -mb-24 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -1416,7 +1416,7 @@ void loop() {
                             <span className="text-[10px] font-black px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 uppercase tracking-wider font-mono">PLN Monitor</span>
                             <span className="text-[9px] font-mono font-bold text-gray-400 dark:text-gray-500">GPIO 35</span>
                           </div>
-                          <h4 className="text-xs font-black text-gray-855 dark:text-white">PLN Outage Detector</h4>
+                          <h4 className="text-xs font-black text-gray-800 dark:text-white">PLN Outage Detector</h4>
                           <p className="text-[10px] text-gray-550 dark:text-gray-400 leading-relaxed">
                             Hubhubungankan adaptor PLN 12V ke input Optokopler. Kaki output optokopler dihubungkan ke pin <span className="font-mono text-cyan-550 dark:text-cyan-400 font-bold bg-cyan-500/5 px-1 py-0.5 rounded">GPIO 35</span>. Berfungsi memicu alarm pemadaman listrik secara instan.
                           </p>
@@ -1429,7 +1429,7 @@ void loop() {
                             <span className="text-[10px] font-black px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-550 dark:text-emerald-450 uppercase tracking-wider font-mono">3S Cells</span>
                             <span className="text-[9px] font-mono font-bold text-gray-400 dark:text-gray-500">GPIO 34</span>
                           </div>
-                          <h4 className="text-xs font-black text-gray-855 dark:text-white">Battery Cell Voltage Division</h4>
+                          <h4 className="text-xs font-black text-gray-800 dark:text-white">Battery Cell Voltage Division</h4>
                           <p className="text-[10px] text-gray-550 dark:text-gray-400 leading-relaxed">
                             Hubungkan kutub positif baterai 3S (12.6V max) ke rangkaian pembagi tegangan (<span className="font-semibold text-gray-700 dark:text-slate-300">Resistor 10k & 4.7k Ohm</span>). Hubungkan titik tengah resistor ke pin analog <span className="font-mono text-cyan-550 dark:text-cyan-400 font-bold bg-cyan-500/5 px-1 py-0.5 rounded">GPIO 34</span>.
                           </p>
@@ -1442,7 +1442,7 @@ void loop() {
                             <span className="text-[10px] font-black px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-500 uppercase tracking-wider font-mono">I2C BUS</span>
                             <span className="text-[9px] font-mono font-bold text-gray-400 dark:text-gray-500">SDA=21 · SCL=22</span>
                           </div>
-                          <h4 className="text-xs font-black text-gray-855 dark:text-white font-mono">INA219 Current & Bus Monitors</h4>
+                          <h4 className="text-xs font-black text-gray-800 dark:text-white font-mono">INA219 Current & Bus Monitors</h4>
                           <div className="text-[10px] text-gray-555 dark:text-gray-400 leading-relaxed space-y-2">
                             <p>Hubungkan pin I2C dari seluruh modul sensor INA219 secara paralel ke ESP32:</p>
                             <ul className="list-disc pl-4 space-y-1">
@@ -1461,7 +1461,7 @@ void loop() {
                             <span className="text-[10px] font-black px-2 py-0.5 rounded bg-blue-500/10 text-blue-500 uppercase tracking-wider font-mono">OneWire</span>
                             <span className="text-[9px] font-mono font-bold text-gray-400 dark:text-gray-500">GPIO 4</span>
                           </div>
-                          <h4 className="text-xs font-black text-gray-855 dark:text-white">DS18B20 Temperature Sensors</h4>
+                          <h4 className="text-xs font-black text-gray-800 dark:text-white">DS18B20 Temperature Sensors</h4>
                           <p className="text-[10px] text-gray-555 dark:text-gray-400 leading-relaxed mb-1">
                             Hubungkan semua kabel Data sensor DS18B20 secara paralel ke pin <span className="font-mono text-cyan-550 dark:text-cyan-400 font-bold bg-cyan-500/5 px-1 py-0.5 rounded">GPIO 4</span>. Pasang resistor pull-up <span className="font-semibold text-amber-500 dark:text-amber-400">4.7k Ohm</span> antara pin Data dan 3.3V.
                           </p>

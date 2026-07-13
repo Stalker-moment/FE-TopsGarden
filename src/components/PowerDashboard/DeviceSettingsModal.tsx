@@ -162,7 +162,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
           <FaArrowLeft size={16} />
         </button>
         <div>
-          <h2 className="text-2xl font-black text-gray-850 dark:text-white flex items-center gap-3">
+          <h2 className="text-2xl font-black text-gray-800 dark:text-white flex items-center gap-3">
             <span className="p-2 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-lg">
               <FaMicrochip size={16} />
             </span>
@@ -233,7 +233,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                         <button 
                           onClick={(e) => { e.stopPropagation(); handleDeleteClick(device.id); }} 
                           title="Delete Sensor"
-                          className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-all shadow-sm cursor-pointer"
+                          className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900 rounded-lg transition-all shadow-sm cursor-pointer"
                         >
                           <FaTrash size={12} />
                         </button>
@@ -245,7 +245,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
             </AnimatePresence>
 
             {devices.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-12 text-gray-400 dark:text-gray-650">
+              <div className="flex flex-col items-center justify-center py-12 text-gray-400 dark:text-gray-600">
                 <FaMicrochip size={36} className="mb-2 opacity-40 animate-pulse" />
                 <p className="text-xs font-semibold">No sensors registered yet.</p>
               </div>
@@ -265,11 +265,11 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
               <div className="flex justify-between items-center border-b border-gray-100 dark:border-slate-800 pb-3 mb-2">
                 <div>
                   <h3 className="text-sm font-black text-gray-800 dark:text-white uppercase tracking-wider">Configure Sensor Settings</h3>
-                  <p className="text-[10px] text-gray-400 dark:text-gray-550 font-mono mt-0.5">ID: {editingId}</p>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono mt-0.5">ID: {editingId}</p>
                 </div>
                 <button 
                   onClick={handleCancelEdit} 
-                  className="p-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-955 dark:hover:bg-gray-900 rounded-lg text-gray-450 dark:text-gray-550 transition-all active:scale-95"
+                  className="p-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-900 dark:hover:bg-gray-800 rounded-lg text-gray-400 dark:text-gray-500 transition-all active:scale-95"
                 >
                   <FaTimes size={14} />
                 </button>
@@ -278,18 +278,18 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
               {/* Input Fields */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-400 dark:text-gray-550 uppercase tracking-wider">Sensor Name</label>
+                  <label className="text-[10px] font-black text-gray-400 dark:text-gray-400 uppercase tracking-wider">Sensor Name</label>
                   <input 
-                    className="w-full px-4 py-2.5 text-sm rounded-xl bg-white dark:bg-gray-955 border border-gray-200 dark:border-gray-800 focus:border-blue-500 outline-none focus:ring-1 focus:ring-blue-500 transition-all text-gray-855 dark:text-white font-semibold"
+                    className="w-full px-4 py-2.5 text-sm rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 focus:border-blue-500 outline-none focus:ring-1 focus:ring-blue-500 transition-all text-gray-800 dark:text-white font-semibold"
                     placeholder="e.g. Washing Machine" 
                     value={formData.name}
                     onChange={e => setFormData({...formData, name: e.target.value})}
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider">Location</label>
+                  <label className="text-[10px] font-black text-gray-400 dark:text-gray-400 uppercase tracking-wider">Location</label>
                   <input 
-                    className="w-full px-4 py-2.5 text-sm rounded-xl bg-white dark:bg-gray-955 border border-gray-200 dark:border-gray-800 focus:border-blue-500 outline-none focus:ring-1 focus:ring-blue-500 transition-all text-gray-855 dark:text-white font-semibold"
+                    className="w-full px-4 py-2.5 text-sm rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 focus:border-blue-500 outline-none focus:ring-1 focus:ring-blue-500 transition-all text-gray-800 dark:text-white font-semibold"
                     placeholder="e.g. Laundry Area" 
                     value={formData.location}
                     onChange={e => setFormData({...formData, location: e.target.value})}
@@ -298,7 +298,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
               </div>
 
               {/* Relay Protection Settings Block */}
-              <div className="p-4 rounded-2xl bg-gray-50/50 dark:bg-gray-950/40 border border-gray-100 dark:border-gray-800 space-y-4">
+              <div className="p-4 rounded-2xl bg-gray-50/50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-800 space-y-4">
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input 
                     type="checkbox" 
@@ -308,7 +308,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                   />
                   <div>
                     <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">Has Protection Relay</span>
-                    <span className="text-[9px] text-gray-455 dark:text-gray-500 block">Enable external relay for overcurrent trip protection</span>
+                    <span className="text-[9px] text-gray-400 dark:text-gray-500 block">Enable external relay for overcurrent trip protection</span>
                   </div>
                 </label>
 
@@ -344,12 +344,12 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                               if (val > 25.00) val = 25.00;
                               setFormData({...formData, overcurrentThreshold: isNaN(val) ? 0.20 : val});
                             }}
-                            className="w-20 px-2 py-1.5 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-xl text-xs font-mono font-bold text-blue-600 dark:text-blue-400 text-center shadow-sm"
+                            className="w-20 px-2 py-1.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-xl text-xs font-mono font-bold text-blue-600 dark:text-blue-400 text-center shadow-sm"
                           />
                           <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 font-mono">A</span>
                         </div>
                       </div>
-                      <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-550 font-semibold font-mono">
+                      <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-500 font-semibold font-mono">
                         <span>Min: 0.20 A</span>
                         <span>Max: 25.00 A</span>
                       </div>
@@ -357,7 +357,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
 
                     {/* Delay Input & Slider */}
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider block">Trip Delay (Filter Spikes)</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider block">Trip Delay (Filter Spikes)</label>
                       <div className="flex items-center gap-4">
                         <input 
                           type="range"
@@ -380,19 +380,19 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                               if (val > 15) val = 15;
                               setFormData({...formData, overcurrentDelay: isNaN(val) ? 0 : val});
                             }}
-                            className="w-20 px-2 py-1.5 bg-white dark:bg-gray-955 border border-gray-200 dark:border-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-xl text-xs font-mono font-bold text-blue-600 dark:text-blue-400 text-center shadow-sm"
+                            className="w-20 px-2 py-1.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-xl text-xs font-mono font-bold text-blue-600 dark:text-blue-400 text-center shadow-sm"
                           />
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 font-mono">detik</span>
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 font-mono">detik</span>
                         </div>
                       </div>
-                      <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-550 font-semibold font-mono">
+                      <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-500 font-semibold font-mono">
                         <span>0s (Instant Spike Filter)</span>
                         <span>Max: 15s</span>
                       </div>
                     </div>
 
                     {/* Auto Reconnect */}
-                    <div className="space-y-4 pt-2 border-t border-gray-150 dark:border-gray-850">
+                    <div className="space-y-4 pt-2 border-t border-gray-150 dark:border-gray-800">
                       <label className="flex items-center gap-3 cursor-pointer">
                         <input 
                           type="checkbox" 
@@ -402,14 +402,14 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                         />
                         <div>
                           <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">Auto-Reconnect Relay</span>
-                          <span className="text-[9px] text-gray-405 dark:text-gray-500 block">Reconnect relay automatically after cutoff cooldown</span>
+                          <span className="text-[9px] text-gray-400 dark:text-gray-500 block">Reconnect relay automatically after cutoff cooldown</span>
                         </div>
                       </label>
 
                       {/* Reconnect Delay */}
                       {formData.autoReconnect ? (
                         <div className="space-y-2 pl-6 animate-fadeIn">
-                          <label className="text-[10px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider block">Reconnect Delay Cooldown</label>
+                          <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider block">Reconnect Delay Cooldown</label>
                           <div className="flex items-center gap-4">
                             <input 
                               type="range"
@@ -432,18 +432,18 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                                   if (val > 120) val = 120;
                                   setFormData({...formData, reconnectDelay: isNaN(val) ? 5 : val});
                                 }}
-                                className="w-20 px-2 py-1.5 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-xl text-xs font-mono font-bold text-blue-600 dark:text-blue-400 text-center shadow-sm"
+                                className="w-20 px-2 py-1.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-xl text-xs font-mono font-bold text-blue-600 dark:text-blue-400 text-center shadow-sm"
                               />
-                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 font-mono">detik</span>
+                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 font-mono">detik</span>
                             </div>
                           </div>
-                          <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-550 font-semibold font-mono">
+                          <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-500 font-semibold font-mono">
                             <span>Min: 5s</span>
                             <span>Max: 120s</span>
                           </div>
                         </div>
                       ) : (
-                        <div className="pl-6 py-2 px-3 bg-rose-500/5 border border-rose-500/10 rounded-xl text-[10px] text-rose-500 dark:text-rose-455 font-medium leading-relaxed">
+                        <div className="pl-6 py-2 px-3 bg-rose-500/5 border border-rose-500/10 rounded-xl text-[10px] text-rose-500 dark:text-rose-400 font-medium leading-relaxed">
                           ⚠️ <b>Manual Reconnect:</b> Sirkuit akan tetap terputus (mati) setelah relay trip/putus. Anda harus menekan tombol &quot;Reset &amp; Reconnect (ON)&quot; secara manual di dashboard utama untuk menyalakannya kembali.
                         </div>
                       )}
@@ -457,7 +457,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                 <button 
                   onClick={handleCancelEdit} 
                   disabled={isLoading} 
-                  className="px-5 py-2.5 text-xs font-bold text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-955 rounded-xl transition-all cursor-pointer"
+                  className="px-5 py-2.5 text-xs font-bold text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 rounded-xl transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -482,7 +482,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                 </div>
                 <button 
                   onClick={handleCancelEdit} 
-                  className="p-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-955 dark:hover:bg-gray-900 rounded-lg text-gray-450 dark:text-gray-550 transition-all active:scale-95"
+                  className="p-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-900 dark:hover:bg-gray-800 rounded-lg text-gray-400 dark:text-gray-500 transition-all active:scale-95"
                 >
                   <FaTimes size={14} />
                 </button>
@@ -491,18 +491,18 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
               {/* Input Fields */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-400 dark:text-gray-550 uppercase tracking-wider">Sensor Name</label>
+                  <label className="text-[10px] font-black text-gray-400 dark:text-gray-400 uppercase tracking-wider">Sensor Name</label>
                   <input 
-                    className="w-full px-4 py-2.5 text-sm rounded-xl bg-white dark:bg-gray-955 border border-yellow-200 dark:border-yellow-900/30 focus:border-yellow-500 outline-none focus:ring-1 focus:ring-yellow-500 transition-all text-gray-855 dark:text-white font-semibold"
+                    className="w-full px-4 py-2.5 text-sm rounded-xl bg-white dark:bg-gray-900 border border-yellow-200 dark:border-yellow-900/30 focus:border-yellow-500 outline-none focus:ring-1 focus:ring-yellow-500 transition-all text-gray-800 dark:text-white font-semibold"
                     placeholder="e.g. Washing Machine" 
                     value={formData.name}
                     onChange={e => setFormData({...formData, name: e.target.value})}
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider">Location</label>
+                  <label className="text-[10px] font-black text-gray-400 dark:text-gray-400 uppercase tracking-wider">Location</label>
                   <input 
-                    className="w-full px-4 py-2.5 text-sm rounded-xl bg-white dark:bg-gray-955 border border-yellow-200 dark:border-yellow-900/30 focus:border-yellow-500 outline-none focus:ring-1 focus:ring-yellow-500 transition-all text-gray-855 dark:text-white font-semibold"
+                    className="w-full px-4 py-2.5 text-sm rounded-xl bg-white dark:bg-gray-900 border border-yellow-200 dark:border-yellow-900/30 focus:border-yellow-500 outline-none focus:ring-1 focus:ring-yellow-500 transition-all text-gray-800 dark:text-white font-semibold"
                     placeholder="e.g. Laundry Area" 
                     value={formData.location}
                     onChange={e => setFormData({...formData, location: e.target.value})}
@@ -517,11 +517,11 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                     type="checkbox" 
                     checked={formData.hasRelay}
                     onChange={e => setFormData({...formData, hasRelay: e.target.checked})}
-                    className="rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-yellow-550 focus:ring-yellow-550/20"
+                    className="rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-yellow-500 focus:ring-yellow-500/20"
                   />
                   <div>
                     <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">Has Protection Relay</span>
-                    <span className="text-[9px] text-gray-450 dark:text-gray-500 block">Enable external relay for overcurrent trip protection</span>
+                    <span className="text-[9px] text-gray-400 dark:text-gray-500 block">Enable external relay for overcurrent trip protection</span>
                   </div>
                 </label>
 
@@ -530,7 +530,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                     {/* Threshold Input & Slider */}
                     <div className="space-y-2">
                       <div className="flex justify-between items-center">
-                        <label className="text-[10px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider">Overcurrent Threshold Limit</label>
+                        <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider">Overcurrent Threshold Limit</label>
                         <span className="text-[10px] text-yellow-600 dark:text-yellow-500 font-bold bg-yellow-500/5 px-2 py-0.5 rounded-full border border-yellow-500/10">
                           Perkiraan Daya: ~{(220 * formData.overcurrentThreshold).toFixed(0)} Watt
                         </span>
@@ -557,12 +557,12 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                               if (val > 25.00) val = 25.00;
                               setFormData({...formData, overcurrentThreshold: isNaN(val) ? 0.20 : val});
                             }}
-                            className="w-20 px-2 py-1.5 bg-white dark:bg-gray-955 border border-yellow-200 dark:border-yellow-900/30 focus:border-yellow-500 focus:outline-none focus:ring-1 focus:ring-yellow-500 rounded-xl text-xs font-mono font-bold text-yellow-600 dark:text-yellow-500 text-center shadow-sm"
+                            className="w-20 px-2 py-1.5 bg-white dark:bg-gray-900 border border-yellow-200 dark:border-yellow-900/30 focus:border-yellow-500 focus:outline-none focus:ring-1 focus:ring-yellow-500 rounded-xl text-xs font-mono font-bold text-yellow-600 dark:text-yellow-500 text-center shadow-sm"
                           />
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 font-mono">A</span>
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 font-mono">A</span>
                         </div>
                       </div>
-                      <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-550 font-semibold font-mono">
+                      <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-500 font-semibold font-mono">
                         <span>Min: 0.20 A</span>
                         <span>Max: 25.00 A</span>
                       </div>
@@ -570,7 +570,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
 
                     {/* Delay Input & Slider */}
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider block">Trip Delay (Filter Spikes)</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider block">Trip Delay (Filter Spikes)</label>
                       <div className="flex items-center gap-4">
                         <input 
                           type="range"
@@ -579,7 +579,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                           step="1"
                           value={formData.overcurrentDelay}
                           onChange={e => setFormData({...formData, overcurrentDelay: parseInt(e.target.value)})}
-                          className="flex-1 h-1.5 bg-gray-255 dark:bg-gray-855 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                          className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-lg appearance-none cursor-pointer accent-yellow-500"
                         />
                         <div className="flex items-center gap-1 shrink-0">
                           <input 
@@ -593,19 +593,19 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                               if (val > 15) val = 15;
                               setFormData({...formData, overcurrentDelay: isNaN(val) ? 0 : val});
                             }}
-                            className="w-20 px-2 py-1.5 bg-white dark:bg-gray-955 border border-yellow-200 dark:border-yellow-900/30 focus:border-yellow-500 focus:outline-none focus:ring-1 focus:ring-yellow-500 rounded-xl text-xs font-mono font-bold text-yellow-600 dark:text-yellow-500 text-center shadow-sm"
+                            className="w-20 px-2 py-1.5 bg-white dark:bg-gray-900 border border-yellow-200 dark:border-yellow-900/30 focus:border-yellow-500 focus:outline-none focus:ring-1 focus:ring-yellow-500 rounded-xl text-xs font-mono font-bold text-yellow-600 dark:text-yellow-500 text-center shadow-sm"
                           />
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 font-mono">detik</span>
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 font-mono">detik</span>
                         </div>
                       </div>
-                      <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-550 font-semibold font-mono">
+                      <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-500 font-semibold font-mono">
                         <span>0s (Instant Spike Filter)</span>
                         <span>Max: 15s</span>
                       </div>
                     </div>
 
                     {/* Auto Reconnect */}
-                    <div className="space-y-4 pt-2 border-t border-gray-150 dark:border-gray-855">
+                    <div className="space-y-4 pt-2 border-t border-gray-150 dark:border-gray-800">
                       <label className="flex items-center gap-3 cursor-pointer">
                         <input 
                           type="checkbox" 
@@ -615,14 +615,14 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                         />
                         <div>
                           <span className="text-xs font-bold text-gray-700 dark:text-slate-200 block">Auto-Reconnect Relay</span>
-                          <span className="text-[9px] text-gray-455 dark:text-gray-500 block">Reconnect relay automatically after cutoff cooldown</span>
+                          <span className="text-[9px] text-gray-400 dark:text-gray-500 block">Reconnect relay automatically after cutoff cooldown</span>
                         </div>
                       </label>
 
                       {/* Reconnect Delay */}
                       {formData.autoReconnect ? (
                         <div className="space-y-2 pl-6 animate-fadeIn">
-                          <label className="text-[10px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider block">Reconnect Delay Cooldown</label>
+                          <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider block">Reconnect Delay Cooldown</label>
                           <div className="flex items-center gap-4">
                             <input 
                               type="range"
@@ -631,7 +631,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                               step="1"
                               value={formData.reconnectDelay}
                               onChange={e => setFormData({...formData, reconnectDelay: parseInt(e.target.value)})}
-                              className="flex-1 h-1.5 bg-gray-250 dark:bg-gray-855 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                              className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-lg appearance-none cursor-pointer accent-yellow-500"
                             />
                             <div className="flex items-center gap-1 shrink-0">
                               <input 
@@ -645,18 +645,18 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
                                   if (val > 120) val = 120;
                                   setFormData({...formData, reconnectDelay: isNaN(val) ? 5 : val});
                                 }}
-                                className="w-20 px-2 py-1.5 bg-white dark:bg-gray-955 border border-yellow-200 dark:border-yellow-900/30 focus:border-yellow-500 focus:outline-none focus:ring-1 focus:ring-yellow-500 rounded-xl text-xs font-mono font-bold text-yellow-600 dark:text-yellow-500 text-center shadow-sm"
+                                className="w-20 px-2 py-1.5 bg-white dark:bg-gray-900 border border-yellow-200 dark:border-yellow-900/30 focus:border-yellow-500 focus:outline-none focus:ring-1 focus:ring-yellow-500 rounded-xl text-xs font-mono font-bold text-yellow-600 dark:text-yellow-500 text-center shadow-sm"
                               />
-                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 font-mono">detik</span>
+                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 font-mono">detik</span>
                             </div>
                           </div>
-                          <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-550 font-semibold font-mono">
+                          <div className="flex justify-between text-[9px] text-gray-400 dark:text-gray-500 font-semibold font-mono">
                             <span>Min: 5s</span>
                             <span>Max: 120s</span>
                           </div>
                         </div>
                       ) : (
-                        <div className="pl-6 py-2 px-3 bg-rose-500/5 border border-rose-500/10 rounded-xl text-[10px] text-rose-500 dark:text-rose-455 font-medium leading-relaxed">
+                        <div className="pl-6 py-2 px-3 bg-rose-500/5 border border-rose-500/10 rounded-xl text-[10px] text-rose-500 dark:text-rose-400 font-medium leading-relaxed">
                           ⚠️ <b>Manual Reconnect:</b> Sirkuit akan tetap terputus (mati) setelah relay trip/putus. Anda harus menekan tombol &quot;Reset &amp; Reconnect (ON)&quot; secara manual di dashboard utama untuk menyalakannya kembali.
                         </div>
                       )}
@@ -669,7 +669,7 @@ const DeviceSettingsModal: React.FC<DeviceSettingsModalProps> = ({ isOpen, onClo
               <div className="flex gap-3 justify-end pt-4 border-t border-gray-150 dark:border-slate-800">
                 <button 
                   onClick={handleCancelEdit} 
-                  className="px-5 py-2.5 text-xs font-bold text-gray-500 dark:text-gray-450 hover:bg-gray-50 dark:hover:bg-gray-955 rounded-xl transition-all cursor-pointer"
+                  className="px-5 py-2.5 text-xs font-bold text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 rounded-xl transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
