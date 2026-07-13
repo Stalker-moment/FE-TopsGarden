@@ -108,6 +108,9 @@ const PowerDashboard: React.FC = () => {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [realtimeData, setRealtimeData] = useState<PzemData | null>(null);
   const [status, setStatus] = useState<"ONLINE" | "OFFLINE">("OFFLINE");
+  const [wsStatus, setWsStatus] = useState<"CONNECTED" | "DISCONNECTED">("DISCONNECTED");
+  const [deviceLastSeen, setDeviceLastSeen] = useState<number | null>(null);
+  const [deviceStatusTick, setDeviceStatusTick] = useState(0);
   const [chartData, setChartData] = useState<PzemLog[]>([]);
   const [recentLogs, setRecentLogs] = useState<PzemLog[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -387,6 +390,7 @@ const PowerDashboard: React.FC = () => {
                   createdAt: new Date().toISOString()
                 });
                 setStatus("ONLINE");
+                setDeviceLastSeen(Date.now());
 
                 const now = Date.now();
                 if (now - lastHeavyUpdate.current > 3000) {
@@ -413,6 +417,7 @@ const PowerDashboard: React.FC = () => {
                 if (current.data) {
                   setRealtimeData({ id: current.id, ...current.data, createdAt: current.lastUpdate || new Date().toISOString() });
                   setStatus("ONLINE");
+                  setDeviceLastSeen(Date.now());
                   
                   const now = Date.now();
                   if (now - lastHeavyUpdate.current > 3000) {
@@ -432,10 +437,17 @@ const PowerDashboard: React.FC = () => {
         }
       } catch (e) { console.error("WS Parse Error", e); }
     };
-    ws.onerror = () => setStatus("OFFLINE");
-    ws.onclose = () => setStatus("OFFLINE");
+    ws.onopen = () => setWsStatus("CONNECTED");
+    ws.onerror = () => { setStatus("OFFLINE"); setWsStatus("DISCONNECTED"); };
+    ws.onclose = () => { setStatus("OFFLINE"); setWsStatus("DISCONNECTED"); };
     return () => ws.close();
   }, [selectedDeviceId]);
+
+  // Tick every 5s to refresh device staleness label
+  useEffect(() => {
+    const id = setInterval(() => setDeviceStatusTick(t => t + 1), 5000);
+    return () => clearInterval(id);
+  }, []);
 
   // 4. Fetch kWh Usage Chart data
   const fetchUsageData = useCallback(async () => {
@@ -1331,12 +1343,68 @@ const PowerDashboard: React.FC = () => {
               </div>
             )}
 
-            <div className="flex items-center gap-2.5 bg-white dark:bg-gray-800 px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-              <div className={`h-2 w-2 rounded-full ${status === "ONLINE" ? "bg-green-500 animate-pulse" : "bg-gray-400"}`}></div>
-              <span className={`text-xs md:text-sm font-bold ${status === "ONLINE" ? "text-green-600 dark:text-green-400" : "text-gray-500"}`}>
-                {status === "ONLINE" ? "Connected" : "Offline"}
-              </span>
-            </div>
+            {/* === Dual Status Indicators === */}
+            {(() => {
+              // WS indicator
+              const wsConnected = wsStatus === "CONNECTED";
+              // Device freshness: offline if no data in 30s, or never seen
+              const STALE_MS = 30_000;
+              // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+              deviceStatusTick; // read tick to trigger re-render
+              const nowMs = Date.now();
+              const agoMs = deviceLastSeen ? nowMs - deviceLastSeen : null;
+              const deviceOnline = agoMs !== null && agoMs < STALE_MS;
+              const agoSec = agoMs !== null ? Math.round(agoMs / 1000) : null;
+              const agoLabel = agoSec === null
+                ? 'Belum ada data'
+                : agoSec < 60 ? `${agoSec}s lalu` : `${Math.round(agoSec / 60)}m lalu`;
+
+              return (
+                <div className="flex items-center gap-2">
+                  {/* 1. WebSocket Connection */}
+                  <div
+                    title={wsConnected ? 'WebSocket terhubung ke server' : 'WebSocket terputus dari server'}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold shadow-sm transition-all duration-300 ${
+                      wsConnected
+                        ? 'bg-white dark:bg-gray-800 border-green-300 dark:border-green-700 text-green-700 dark:text-green-400'
+                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400'
+                    }`}
+                  >
+                    <svg className={`w-3 h-3 ${wsConnected ? 'text-green-500' : 'text-gray-400'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+                    </svg>
+                    <span className="hidden sm:inline">{wsConnected ? 'Server' : 'Offline'}</span>
+                    <div className={`w-1.5 h-1.5 rounded-full ${
+                      wsConnected ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
+                    }`} />
+                  </div>
+
+                  {/* 2. Device Sensor Status */}
+                  {selectedDeviceId !== 'all' && (
+                    <div
+                      title={deviceOnline
+                        ? `Alat mengirim data ${agoLabel}`
+                        : agoSec === null ? 'Alat belum pernah mengirim data' : `Data terakhir ${agoLabel} — kemungkinan offline`
+                      }
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold shadow-sm transition-all duration-300 ${
+                        deviceOnline
+                          ? 'bg-white dark:bg-gray-800 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400'
+                          : 'bg-white dark:bg-gray-800 border-orange-200 dark:border-orange-800 text-orange-500 dark:text-orange-400'
+                      }`}
+                    >
+                      <FaPlug size={10} className={deviceOnline ? 'text-blue-500' : 'text-orange-400'} />
+                      <span className="hidden sm:inline">{deviceOnline ? 'Alat' : 'Alat'}</span>
+                      <div className={`w-1.5 h-1.5 rounded-full ${
+                        deviceOnline ? 'bg-blue-500 animate-pulse' : 'bg-orange-400'
+                      }`} />
+                      <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 hidden md:inline">
+                        {deviceOnline ? agoLabel : (agoSec !== null ? agoLabel : '—')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             
             <div className="flex items-center gap-2">
               <button 
