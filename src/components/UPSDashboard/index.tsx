@@ -29,6 +29,10 @@ import { ServerBatteryInfo } from '@/types/pzem';
 import { UpsDevice, UpsLog, UpsConfig } from '@/types/ups';
 import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
+import Prism from 'prismjs';
+import 'prismjs/components/prism-clike';
+import 'prismjs/components/prism-c';
+import 'prismjs/components/prism-cpp';
 
 const ReactApexChart = dynamic(() => import('react-apexcharts'), { ssr: false });
 
@@ -131,76 +135,7 @@ const UPSDashboard: React.FC = () => {
   };
 
   const highlightCpp = (code: string) => {
-    let html = code
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-    
-    const placeholders: string[] = [];
-    const getLetterKey = (index: number) => {
-      let key = "";
-      let temp = index;
-      do {
-        key = String.fromCharCode(65 + (temp % 26)) + key;
-        temp = Math.floor(temp / 26) - 1;
-      } while (temp >= 0);
-      return `___PLACEHOLDER_${key}___`;
-    };
-
-    const pushPlaceholder = (val: string) => {
-      const key = getLetterKey(placeholders.length);
-      placeholders.push(val);
-      return key;
-    };
-
-    // 1. Strings
-    html = html.replace(/("(?:[^"\\]|\\.)*")/g, (match) => {
-      return pushPlaceholder(`<span class="text-emerald-500 dark:text-emerald-350">${match}</span>`);
-    });
-
-    // 2. Block Comments
-    html = html.replace(/(\/\*[\s\S]*?\*\/)/g, (match) => {
-      return pushPlaceholder(`<span class="text-gray-400 dark:text-gray-500 italic">${match}</span>`);
-    });
-
-    // 3. Line Comments
-    html = html.replace(/(\/\/.*)/g, (match) => {
-      return pushPlaceholder(`<span class="text-gray-400 dark:text-gray-500 italic">${match}</span>`);
-    });
-
-    // 4. Directives
-    html = html.replace(/(#\w+)/g, '<span class="text-orange-500 font-semibold">$1</span>');
-    
-    // 5. Keywords
-    const keywords = [
-      "void", "setup", "loop", "const", "char", "int", "float", "bool", "if", "else", 
-      "while", "return", "true", "false", "static", "delay", "pinMode", "digitalRead", "analogRead",
-      "INPUT", "OUTPUT", "HIGH", "LOW", "abs"
-    ];
-    keywords.forEach(kw => {
-      const reg = new RegExp(`\\b(${kw})\\b`, 'g');
-      html = html.replace(reg, '<span class="text-cyan-500 font-bold">$1</span>');
-    });
-
-    // 6. Custom Types / Objects
-    const types = [
-      "WiFi", "HTTPClient", "StaticJsonDocument", "JsonObject", "serializeJson", "Wire", "Serial", "Adafruit_INA219", "OneWire", "DallasTemperature"
-    ];
-    types.forEach(t => {
-      const reg = new RegExp(`\\b(${t})\\b`, 'g');
-      html = html.replace(reg, '<span class="text-yellow-500 dark:text-yellow-400 font-bold">$1</span>');
-    });
-
-    // 7. Numbers (only when outside placeholders and classes)
-    html = html.replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="text-purple-400 dark:text-purple-300 font-semibold">$1</span>');
-
-    // 8. Restore Placeholders (reverse order to ensure nested placeholders resolve correctly)
-    for (let i = placeholders.length - 1; i >= 0; i--) {
-      const key = getLetterKey(i);
-      html = html.replace(key, placeholders[i]);
-    }
-
-    return html;
+    return Prism.highlight(code, Prism.languages.cpp, 'cpp');
   };
 
   const getWiringGuide = () => {
@@ -1559,6 +1494,16 @@ void loop() {
 
                     {/* Code Window Container */}
                     <div className="rounded-2xl border border-gray-250 dark:border-gray-800 bg-[#0B0F19] text-gray-305 overflow-hidden shadow-xl flex flex-col font-mono select-none">
+                      <style dangerouslySetInnerHTML={{ __html: `
+                        .token.comment, .token.prolog, .token.doctype, .token.cdata { color: #6b7280; font-style: italic; }
+                        .token.punctuation { color: #9ca3af; }
+                        .token.property, .token.tag, .token.boolean, .token.number, .token.constant, .token.symbol, .token.deleted { color: #f472b6; }
+                        .token.selector, .token.attr-name, .token.string, .token.char, .token.builtin, .token.inserted { color: #34d399; }
+                        .token.operator, .token.entity, .token.url { color: #a5b4fc; }
+                        .token.atrule, .token.attr-value, .token.keyword { color: #22d3ee; font-weight: bold; }
+                        .token.function, .token.class-name { color: #fbbf24; }
+                        .token.regex, .token.important, .token.variable { color: #fb7185; }
+                      `}} />
                       {/* Window Header */}
                       <div className="flex items-center justify-between px-4 py-3 bg-[#131927] border-b border-gray-800">
                         <div className="flex items-center gap-2">
