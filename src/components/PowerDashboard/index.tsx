@@ -163,6 +163,24 @@ const PowerDashboard: React.FC = () => {
   // Fullscreen modal state
   const [fullscreenChart, setFullscreenChart] = useState<"usage" | "trend" | null>(null);
 
+  // Custom device dropdown state
+  const [deviceDropdownOpen, setDeviceDropdownOpen] = useState(false);
+  const deviceDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Per-device realtime map for "all" split view
+  const [allDevicesRealtimeMap, setAllDevicesRealtimeMap] = useState<Record<string, { data: any; isOnline: boolean }>>({});
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (deviceDropdownRef.current && !deviceDropdownRef.current.contains(e.target as Node)) {
+        setDeviceDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, []);
+
   // Relay & Overcurrent protection state
   const [activeRelayState, setActiveRelayState] = useState<boolean>(true);
   const [activeHasRelay, setActiveHasRelay] = useState<boolean>(false);
@@ -337,6 +355,18 @@ const PowerDashboard: React.FC = () => {
             pendingWsData.current = message;
           } else {
             if (selectedDeviceId === "all") {
+              // Build per-device realtime map for split view
+              const newMap: Record<string, { data: any; isOnline: boolean }> = {};
+              const twoMinAgo = Date.now() - 2 * 60 * 1000;
+              message.forEach((d: any) => {
+                const lastMs = d.lastUpdate ? new Date(d.lastUpdate).getTime() : 0;
+                newMap[d.id] = {
+                  data: d.data || null,
+                  isOnline: !!(d.data && lastMs > twoMinAgo)
+                };
+              });
+              setAllDevicesRealtimeMap(newMap);
+
               const activeDevs = message.filter((d: any) => d.isActive !== false && d.data);
               if (activeDevs.length > 0) {
                 const totalEnergy = activeDevs.reduce((sum: number, d: any) => sum + (d.data.energy || 0), 0);
@@ -1195,18 +1225,110 @@ const PowerDashboard: React.FC = () => {
               </div>
             )}
 
-            {/* Device Selector */}
+            {/* Custom Device Selector Dropdown */}
             {devices.length > 0 && (
-              <select 
-                className="flex-1 lg:flex-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-yellow-500 min-w-[150px]"
-                value={selectedDeviceId || ""}
-                onChange={(e) => setSelectedDeviceId(e.target.value)}
-              >
-                <option value="all">Semua Alat (All Devices)</option>
-                {devices.map(dev => (
-                  <option key={dev.id} value={dev.id}>{dev.name} ({dev.location})</option>
-                ))}
-              </select>
+              <div className="relative flex-1 lg:flex-none min-w-[200px]" ref={deviceDropdownRef}>
+                <button
+                  id="device-selector-btn"
+                  onClick={() => setDeviceDropdownOpen(o => !o)}
+                  className="w-full flex items-center justify-between gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-yellow-400 dark:hover:border-yellow-500 text-sm rounded-xl px-4 py-2.5 transition-all duration-200 shadow-sm group cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-yellow-500 shrink-0">
+                      {selectedDeviceId === 'all' ? <FaBolt size={13} /> : <FaPlug size={13} />}
+                    </span>
+                    <span className="truncate font-semibold text-gray-700 dark:text-gray-200">
+                      {selectedDeviceId === 'all'
+                        ? 'Semua Alat'
+                        : devices.find(d => d.id === selectedDeviceId)?.name ?? 'Pilih Alat'
+                      }
+                    </span>
+                    {selectedDeviceId !== 'all' && (
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">
+                        {devices.find(d => d.id === selectedDeviceId)?.location}
+                      </span>
+                    )}
+                  </div>
+                  <svg
+                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 shrink-0 ${
+                      deviceDropdownOpen ? 'rotate-180' : ''
+                    }`}
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {/* Dropdown Panel */}
+                {deviceDropdownOpen && (
+                  <div className="absolute z-50 top-full left-0 mt-2 w-full min-w-[220px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl shadow-black/20 overflow-hidden">
+                    {/* All Devices option */}
+                    <button
+                      onClick={() => { setSelectedDeviceId('all'); setDeviceDropdownOpen(false); }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition-colors cursor-pointer ${
+                        selectedDeviceId === 'all'
+                          ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400'
+                          : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800'
+                      }`}
+                    >
+                      <span className={`p-1.5 rounded-lg ${
+                        selectedDeviceId === 'all' ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-600' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'
+                      }`}>
+                        <FaBolt size={11} />
+                      </span>
+                      <div className="text-left">
+                        <div className="font-bold">Semua Alat</div>
+                        <div className="text-[10px] text-gray-400">{devices.length} perangkat terdaftar</div>
+                      </div>
+                      {selectedDeviceId === 'all' && (
+                        <FaCheckCircle className="ml-auto text-yellow-500" size={13} />
+                      )}
+                    </button>
+
+                    {/* Divider */}
+                    <div className="border-t border-gray-100 dark:border-gray-800 mx-3" />
+
+                    {/* Per device options */}
+                    {devices.map(dev => {
+                      const devRt = allDevicesRealtimeMap[dev.id];
+                      const isOnline = devRt?.isOnline ?? false;
+                      const isSelected = selectedDeviceId === dev.id;
+                      return (
+                        <button
+                          key={dev.id}
+                          onClick={() => { setSelectedDeviceId(dev.id); setDeviceDropdownOpen(false); }}
+                          className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400'
+                              : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800'
+                          }`}
+                        >
+                          <span className={`p-1.5 rounded-lg ${
+                            isSelected ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'
+                          }`}>
+                            <FaPlug size={11} />
+                          </span>
+                          <div className="text-left min-w-0 flex-1">
+                            <div className="font-semibold truncate">{dev.name}</div>
+                            <div className="text-[10px] text-gray-400 truncate">{dev.location}</div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {devRt && (
+                              <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400">
+                                {devRt.data?.power?.toFixed(0) ?? '0'}W
+                              </span>
+                            )}
+                            <div className={`w-1.5 h-1.5 rounded-full ${
+                              isOnline ? 'bg-green-500 animate-pulse' : 'bg-gray-300 dark:bg-gray-600'
+                            }`} />
+                            {isSelected && <FaCheckCircle className="text-blue-500" size={12} />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             )}
 
             <div className="flex items-center gap-2.5 bg-white dark:bg-gray-800 px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
@@ -1240,13 +1362,157 @@ const PowerDashboard: React.FC = () => {
         {/* Modals */}
         <ConfirmationModal isOpen={isResetConfirmOpen} onClose={() => setIsResetConfirmOpen(false)} onConfirm={confirmResetEnergy} title="Reset Energy Counter?" message="Are you sure you want to reset the energy (kWh) counter for this device? This action cannot be undone." confirmText="Yes, Reset" isDanger={true} />
 
-        {/* Realtime Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <CardMetric title="Total Energy (Month)" value={displayData.energy.toFixed(2)} unit="kWh" icon={<FaLeaf />} color="text-green-500" subValue={`Est. Cost: Rp ${(displayData.energy * PLN_RATE).toLocaleString('id-ID', { maximumFractionDigits: 0 })}`} />
-          <CardMetric title="Active Power" value={displayData.power.toFixed(1)} unit="W" icon={<FaBolt />} color="text-yellow-500" subValue={`PF: ${displayData.pf.toFixed(2)}`} />
-          <CardMetric title="Voltage" value={displayData.voltage.toFixed(1)} unit="V" icon={<FaPlug />} color="text-blue-500" subValue={`Freq: ${displayData.frequency.toFixed(1)} Hz`} />
-          <CardMetric title="Current" value={displayData.current.toFixed(2)} unit="A" icon={<FaTachometerAlt />} color="text-red-500" />
-        </div>
+        {/* Realtime Cards — Split per-device if 'all', else aggregate */}
+        {selectedDeviceId === 'all' ? (
+          <div className="mb-8">
+            {/* Total summary bar */}
+            <div className="flex flex-wrap items-center gap-4 mb-5 p-4 rounded-2xl bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-400/20 dark:border-yellow-500/20 backdrop-blur-sm">
+              <div className="flex items-center gap-2">
+                <FaBolt className="text-yellow-500" size={16} />
+                <span className="font-black text-gray-700 dark:text-gray-100 text-sm">Total Semua Alat</span>
+              </div>
+              <div className="flex flex-wrap gap-4 ml-auto">
+                <div className="text-center">
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wide">Total Daya</div>
+                  <div className="text-lg font-black text-yellow-600 dark:text-yellow-400">{displayData.power.toFixed(1)} <span className="text-xs font-medium">W</span></div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wide">Total Arus</div>
+                  <div className="text-lg font-black text-red-600 dark:text-red-400">{displayData.current.toFixed(2)} <span className="text-xs font-medium">A</span></div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wide">Rata-Rata Tegangan</div>
+                  <div className="text-lg font-black text-blue-600 dark:text-blue-400">{displayData.voltage.toFixed(1)} <span className="text-xs font-medium">V</span></div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wide">Total Energi</div>
+                  <div className="text-lg font-black text-green-600 dark:text-green-400">{displayData.energy.toFixed(2)} <span className="text-xs font-medium">kWh</span></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Per-device cards grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+              {devices.map(dev => {
+                const devRt = allDevicesRealtimeMap[dev.id];
+                const isOnline = devRt?.isOnline ?? false;
+                const d = devRt?.data;
+                return (
+                  <motion.div
+                    key={dev.id}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    whileHover={{ y: -4, scale: 1.01 }}
+                    className={`relative overflow-hidden rounded-2xl border backdrop-blur-xl shadow-lg transition-all duration-300 ${
+                      isOnline
+                        ? 'bg-white/80 dark:bg-gray-800/70 border-white/60 dark:border-gray-700/60'
+                        : 'bg-gray-50/80 dark:bg-gray-900/60 border-gray-200/60 dark:border-gray-700/40 opacity-75'
+                    }`}
+                  >
+                    {/* Card header */}
+                    <div className={`px-5 pt-4 pb-3 flex items-center justify-between border-b ${
+                      isOnline ? 'border-gray-100 dark:border-gray-700/50' : 'border-gray-200/60 dark:border-gray-700/30'
+                    }`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-xl ${
+                          isOnline
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
+                        }`}>
+                          <FaPlug size={14} />
+                        </div>
+                        <div>
+                          <div className="font-black text-sm text-gray-800 dark:text-gray-100 leading-tight">{dev.name}</div>
+                          <div className="text-[10px] text-gray-400 dark:text-gray-500">{dev.location}</div>
+                        </div>
+                      </div>
+                      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                        isOnline
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-500'
+                      }`}>
+                        <div className={`w-1.5 h-1.5 rounded-full ${
+                          isOnline ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
+                        }`} />
+                        {isOnline ? 'ONLINE' : 'OFFLINE'}
+                      </div>
+                    </div>
+
+                    {/* Metrics grid */}
+                    <div className="grid grid-cols-2 gap-0">
+                      {/* Power */}
+                      <div className="p-4 border-r border-b border-gray-100 dark:border-gray-700/40">
+                        <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-1 flex items-center gap-1">
+                          <FaBolt className="text-yellow-500" size={9} /> Daya Aktif
+                        </div>
+                        <div className="text-2xl font-black text-gray-800 dark:text-gray-100">
+                          {isOnline && d ? d.power.toFixed(1) : '—'}
+                          <span className="text-xs font-medium text-gray-400 ml-1">{isOnline ? 'W' : ''}</span>
+                        </div>
+                        {isOnline && d && (
+                          <div className="text-[10px] text-gray-400 mt-0.5">PF: {d.pf.toFixed(2)}</div>
+                        )}
+                      </div>
+                      {/* Voltage */}
+                      <div className="p-4 border-b border-gray-100 dark:border-gray-700/40">
+                        <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-1 flex items-center gap-1">
+                          <FaPlug className="text-blue-500" size={9} /> Tegangan
+                        </div>
+                        <div className="text-2xl font-black text-gray-800 dark:text-gray-100">
+                          {isOnline && d ? d.voltage.toFixed(1) : '—'}
+                          <span className="text-xs font-medium text-gray-400 ml-1">{isOnline ? 'V' : ''}</span>
+                        </div>
+                        {isOnline && d && (
+                          <div className="text-[10px] text-gray-400 mt-0.5">{d.frequency.toFixed(1)} Hz</div>
+                        )}
+                      </div>
+                      {/* Current */}
+                      <div className="p-4 border-r border-gray-100 dark:border-gray-700/40">
+                        <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-1 flex items-center gap-1">
+                          <FaTachometerAlt className="text-red-500" size={9} /> Arus
+                        </div>
+                        <div className="text-2xl font-black text-gray-800 dark:text-gray-100">
+                          {isOnline && d ? d.current.toFixed(2) : '—'}
+                          <span className="text-xs font-medium text-gray-400 ml-1">{isOnline ? 'A' : ''}</span>
+                        </div>
+                      </div>
+                      {/* Energy */}
+                      <div className="p-4">
+                        <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-1 flex items-center gap-1">
+                          <FaLeaf className="text-green-500" size={9} /> Energi
+                        </div>
+                        <div className="text-2xl font-black text-gray-800 dark:text-gray-100">
+                          {isOnline && d ? d.energy.toFixed(2) : '—'}
+                          <span className="text-xs font-medium text-gray-400 ml-1">{isOnline ? 'kWh' : ''}</span>
+                        </div>
+                        {isOnline && d && (
+                          <div className="text-[10px] text-gray-400 mt-0.5">~Rp {(d.energy * PLN_RATE).toLocaleString('id-ID', { maximumFractionDigits: 0 })}</div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Jump to device button */}
+                    <div className="px-4 pb-4 pt-2">
+                      <button
+                        onClick={() => setSelectedDeviceId(dev.id)}
+                        className="w-full py-2 rounded-xl text-xs font-bold bg-gray-50 dark:bg-gray-800/80 text-gray-500 dark:text-gray-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 border border-gray-100 dark:border-gray-700/50 hover:border-blue-200 dark:hover:border-blue-700/50 transition-all duration-200"
+                      >
+                        Lihat Detail &rarr;
+                      </button>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <CardMetric title="Total Energy (Month)" value={displayData.energy.toFixed(2)} unit="kWh" icon={<FaLeaf />} color="text-green-500" subValue={`Est. Cost: Rp ${(displayData.energy * PLN_RATE).toLocaleString('id-ID', { maximumFractionDigits: 0 })}`} />
+            <CardMetric title="Active Power" value={displayData.power.toFixed(1)} unit="W" icon={<FaBolt />} color="text-yellow-500" subValue={`PF: ${displayData.pf.toFixed(2)}`} />
+            <CardMetric title="Voltage" value={displayData.voltage.toFixed(1)} unit="V" icon={<FaPlug />} color="text-blue-500" subValue={`Freq: ${displayData.frequency.toFixed(1)} Hz`} />
+            <CardMetric title="Current" value={displayData.current.toFixed(2)} unit="A" icon={<FaTachometerAlt />} color="text-red-500" />
+          </div>
+        )}
 
         {/* Relay Protection Widget (If Active Device has Relay) */}
         {activeHasRelay && (
