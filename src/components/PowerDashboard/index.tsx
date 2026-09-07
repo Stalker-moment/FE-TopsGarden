@@ -125,6 +125,7 @@ const PowerDashboard: React.FC = () => {
   // Filter for Live Trend Chart (defaults to "combined")
   const [trendFilter, setTrendFilter] = useState<string>("combined"); // "combined" | "multi" | dev.id
   const [deviceChartsMap, setDeviceChartsMap] = useState<Record<string, PzemLog[]>>({});
+  const [syncDeviceChartsMap, setSyncDeviceChartsMap] = useState<Record<string, { x: number; power: number; voltage: number; current: number }[]>>({});
 
   useEffect(() => {
     selectedDeviceIdRef.current = selectedDeviceId;
@@ -373,6 +374,11 @@ const PowerDashboard: React.FC = () => {
           }
         });
 
+        const syncHist: Record<string, { x: number; power: number; voltage: number; current: number }[]> = {};
+        activeDevsWithChart.forEach((d: any) => {
+          syncHist[d.id] = [];
+        });
+
         const combinedPoints: PzemLog[] = [];
         allItems.forEach(item => {
           lastKnown[item.devId] = {
@@ -385,6 +391,19 @@ const PowerDashboard: React.FC = () => {
           const totP = values.reduce((s, v) => s + v.power, 0);
           const totI = values.reduce((s, v) => s + v.current, 0);
           const avgV = values.length > 0 ? values.reduce((s, v) => s + v.voltage, 0) / values.length : 0;
+          const timeMs = new Date(item.createdAt).getTime();
+
+          activeDevsWithChart.forEach((d: any) => {
+            const lk = lastKnown[d.id];
+            if (lk) {
+              syncHist[d.id].push({
+                x: timeMs,
+                power: lk.power,
+                voltage: lk.voltage,
+                current: lk.current
+              });
+            }
+          });
 
           combinedPoints.push({
             id: `comb-${item.createdAt}-${item.devId}`,
@@ -402,6 +421,12 @@ const PowerDashboard: React.FC = () => {
         });
 
         setChartData(combinedPoints.slice(-50));
+
+        const slicedSync: Record<string, { x: number; power: number; voltage: number; current: number }[]> = {};
+        Object.keys(syncHist).forEach(k => {
+          slicedSync[k] = syncHist[k].slice(-50);
+        });
+        setSyncDeviceChartsMap(slicedSync);
 
         // Aggregate outage logs from ALL devices — tag with device name & id, sort by time, top 10
         const allOutage = message.flatMap((d: any) =>
@@ -1122,10 +1147,10 @@ const PowerDashboard: React.FC = () => {
       // Multi-room mode: each room has its own curve in 1 chart
       if (activeMetrics.power) {
         devices.forEach((dev, idx) => {
-          const devChart = deviceChartsMap[dev.id] || [];
+          const devChart = syncDeviceChartsMap[dev.id] || [];
           series.push({
             name: `${dev.name} (W)`,
-            data: devChart.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.power }))
+            data: devChart.map(d => ({ x: d.x, y: d.power }))
           });
           colors.push(DEVICE_COLORS[idx % DEVICE_COLORS.length]);
         });
@@ -1140,10 +1165,10 @@ const PowerDashboard: React.FC = () => {
       }
       if (activeMetrics.voltage) {
         devices.forEach((dev, idx) => {
-          const devChart = deviceChartsMap[dev.id] || [];
+          const devChart = syncDeviceChartsMap[dev.id] || [];
           series.push({
             name: `${dev.name} (V)`,
-            data: devChart.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.voltage }))
+            data: devChart.map(d => ({ x: d.x, y: d.voltage }))
           });
           colors.push(DEVICE_COLORS[(idx + 2) % DEVICE_COLORS.length]);
         });
@@ -1159,10 +1184,10 @@ const PowerDashboard: React.FC = () => {
       }
       if (activeMetrics.current) {
         devices.forEach((dev, idx) => {
-          const devChart = deviceChartsMap[dev.id] || [];
+          const devChart = syncDeviceChartsMap[dev.id] || [];
           series.push({
             name: `${dev.name} (A)`,
-            data: devChart.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.current }))
+            data: devChart.map(d => ({ x: d.x, y: d.current }))
           });
           colors.push(DEVICE_COLORS[(idx + 4) % DEVICE_COLORS.length]);
         });
@@ -1219,7 +1244,7 @@ const PowerDashboard: React.FC = () => {
     if (yAxis.length === 0) yAxis.push({ show: false });
 
     return { powerTrendSeries: series, powerTrendColors: colors, powerTrendYAxis: yAxis };
-  }, [activeMetrics, chartData, deviceChartsMap, trendFilter, selectedDeviceId, devices, isDarkMode]);
+  }, [activeMetrics, chartData, deviceChartsMap, syncDeviceChartsMap, trendFilter, selectedDeviceId, devices, isDarkMode]);
 
   const powerTrendOptions: ApexOptions = useMemo(() => ({
     chart: { 
@@ -1230,7 +1255,7 @@ const PowerDashboard: React.FC = () => {
         enabled: false
       } 
     },
-    stroke: { curve: 'smooth', width: 2 },
+    stroke: { curve: 'smooth', width: 2.5 },
     legend: { 
       show: selectedDeviceId === "all" && trendFilter === "multi",
       position: 'top',
@@ -1239,7 +1264,15 @@ const PowerDashboard: React.FC = () => {
       itemMargin: { horizontal: 8, vertical: 4 }
     },
     dataLabels: { enabled: false },
-    fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.05, stops: [0, 100] } },
+    fill: { 
+      type: 'gradient', 
+      gradient: { 
+        shadeIntensity: 1, 
+        opacityFrom: trendFilter === "multi" ? 0.08 : 0.35, 
+        opacityTo: trendFilter === "multi" ? 0.01 : 0.05, 
+        stops: [0, 100] 
+      } 
+    },
     colors: powerTrendColors,
     grid: { borderColor: isDarkMode ? '#334155' : '#e2e8f0', strokeDashArray: 4 },
     xaxis: { type: 'datetime', labels: { show: false, datetimeUTC: false }, axisBorder: { show: false }, axisTicks: { show: false }, tooltip: { enabled: false } },
