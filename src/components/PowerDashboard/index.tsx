@@ -60,9 +60,9 @@ const MONTH_NAMES = ["Januari","Februari","Maret","April","Mei","Juni","Juli","A
 // ─────────────────────────────────────────────
 
 const CardMetric = ({ 
-  title, value, unit, icon, color, subValue 
+  title, value, unit, icon, color, subValue, isLoading
 }: { 
-  title: string; value: string | number; unit: string; icon: React.ReactNode; color: string; subValue?: string;
+  title: string; value: string | number; unit: string; icon: React.ReactNode; color: string; subValue?: string; isLoading?: boolean;
 }) => (
   <motion.div 
     whileHover={{ y: -5 }}
@@ -76,12 +76,16 @@ const CardMetric = ({
         {icon}
       </div>
       <p className="text-xs md:text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
-      <h4 className="text-2xl md:text-3xl font-black text-gray-800 dark:text-gray-100 mt-1 tracking-tight">
-        {value} <span className="text-base md:text-lg font-medium text-gray-400 ml-1">{unit}</span>
-      </h4>
+      {isLoading ? (
+        <div className="h-8 w-28 bg-gray-200 dark:bg-gray-700/70 rounded-lg animate-pulse mt-1 mb-1" />
+      ) : (
+        <h4 className="text-2xl md:text-3xl font-black text-gray-800 dark:text-gray-100 mt-1 tracking-tight">
+          {value} <span className="text-base md:text-lg font-medium text-gray-400 ml-1">{unit}</span>
+        </h4>
+      )}
       {subValue && (
         <p className="text-[10px] md:text-xs font-semibold text-gray-400 mt-1.5 md:mt-2 flex items-center gap-1">
-          {subValue}
+          {isLoading ? <span className="h-3 w-24 bg-gray-200 dark:bg-gray-700/50 rounded animate-pulse inline-block" /> : subValue}
         </p>
       )}
     </div>
@@ -105,7 +109,14 @@ const PowerDashboard: React.FC = () => {
   
   // State for Real Data
   const [devices, setDevices] = useState<PzemDevice[]>([]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("all");
+  const selectedDeviceIdRef = useRef<string>("all");
+  const [isWsInitialLoading, setIsWsInitialLoading] = useState<boolean>(true);
+  const latestMessageRef = useRef<any[] | null>(null);
+
+  useEffect(() => {
+    selectedDeviceIdRef.current = selectedDeviceId;
+  }, [selectedDeviceId]);
   const [realtimeData, setRealtimeData] = useState<PzemData | null>(null);
   const [status, setStatus] = useState<"ONLINE" | "OFFLINE">("OFFLINE");
   const [wsStatus, setWsStatus] = useState<"CONNECTED" | "DISCONNECTED">("DISCONNECTED");
@@ -254,11 +265,77 @@ const PowerDashboard: React.FC = () => {
   const isHoveringChart = useRef(false);
   const lastHeavyUpdate = useRef(0);
 
-  const applyPendingUpdate = useCallback(() => {
-    if (pendingWsData.current) {
-      const message = pendingWsData.current;
-      pendingWsData.current = null;
-      const current = message.find((d: any) => d.id === selectedDeviceId);
+  const updateStateFromDevices = useCallback((message: any[], devId: string) => {
+    if (!Array.isArray(message)) return;
+
+    // Build per-device realtime map for split view
+    const newMap: Record<string, { data: any; isOnline: boolean }> = {};
+    message.forEach((d: any) => {
+      newMap[d.id] = {
+        data: d.data || null,
+        isOnline: d.isOnline === true
+      };
+    });
+    setAllDevicesRealtimeMap(newMap);
+
+    if (devId === "all") {
+      const activeDevs = message.filter((d: any) => d.isActive !== false && d.data);
+      if (activeDevs.length > 0) {
+        const totalEnergy = activeDevs.reduce((sum: number, d: any) => sum + (d.data.energy || 0), 0);
+        const totalPower = activeDevs.reduce((sum: number, d: any) => sum + (d.data.power || 0), 0);
+        const avgVoltage = activeDevs.reduce((sum: number, d: any) => sum + (d.data.voltage || 0), 0) / activeDevs.length;
+        const totalCurrent = activeDevs.reduce((sum: number, d: any) => sum + (d.data.current || 0), 0);
+        const avgFreq = activeDevs.reduce((sum: number, d: any) => sum + (d.data.frequency || 0), 0) / activeDevs.length;
+        const avgPf = activeDevs.reduce((sum: number, d: any) => sum + (d.data.pf || 0), 0) / activeDevs.length;
+
+        setRealtimeData({
+          id: "all",
+          voltage: avgVoltage,
+          current: totalCurrent,
+          power: totalPower,
+          energy: totalEnergy,
+          frequency: avgFreq,
+          pf: avgPf,
+          createdAt: new Date().toISOString()
+        });
+        setStatus("ONLINE");
+        setDeviceIsOnline(true);
+
+        // Aggregate recent logs from ALL devices — tag each log with device name, sort by time, top 20
+        const allLogs = message.flatMap((d: any) =>
+          (d.logs || []).map((l: any) => ({ ...l, _deviceName: d.name }))
+        );
+        allLogs.sort((a: any, b: any) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        setRecentLogs(allLogs.slice(0, 20));
+
+        // Aggregate chart: merge all devices' chart data, sort by time, last 50
+        const allChart = message.flatMap((d: any) => d.chart || []);
+        allChart.sort((a: any, b: any) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+        setChartData(allChart.slice(-50));
+
+        // Aggregate outage logs from ALL devices — tag with device name, sort by time, top 10
+        const allOutage = message.flatMap((d: any) =>
+          (d.outageLogs || []).map((o: any) => ({ ...o, _deviceName: d.name }))
+        );
+        allOutage.sort((a: any, b: any) =>
+          new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+        );
+        setOutageLogs(allOutage.slice(0, 10));
+        setOutageTotal(message.reduce((sum: number, d: any) => sum + (d.outageTotal || 0), 0));
+      } else {
+        setRealtimeData(null);
+        setStatus("OFFLINE");
+        setRecentLogs([]);
+        setChartData([]);
+        setOutageLogs([]);
+        setOutageTotal(0);
+      }
+    } else {
+      const current = message.find((d: any) => d.id === devId);
       if (current) {
         if (current.hasRelay !== undefined) setActiveHasRelay(current.hasRelay);
         if (current.relayState !== undefined) setActiveRelayState(current.relayState);
@@ -270,13 +347,36 @@ const PowerDashboard: React.FC = () => {
         if (current.data) {
           setRealtimeData({ id: current.id, ...current.data, createdAt: current.lastUpdate || new Date().toISOString() });
           setStatus("ONLINE");
+          setDeviceIsOnline(current.isOnline === true);
+          if (current.lastUpdate) {
+            setDeviceLastUpdateStr(new Date(current.lastUpdate).toLocaleTimeString('id-ID', {
+              timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit'
+            }));
+          }
           if (current.logs) setRecentLogs(current.logs);
           if (current.chart) setChartData(current.chart);
-          lastHeavyUpdate.current = Date.now();
+          if (current.outageLogs) {
+            setOutageLogs(current.outageLogs);
+            setOutageTotal(current.outageTotal ?? 0);
+          }
+        } else {
+          setRealtimeData(null);
+          setStatus("OFFLINE");
+          setRecentLogs([]);
+          setChartData([]);
         }
       }
     }
-  }, [selectedDeviceId]);
+  }, []);
+
+  const applyPendingUpdate = useCallback(() => {
+    if (pendingWsData.current) {
+      const message = pendingWsData.current;
+      pendingWsData.current = null;
+      updateStateFromDevices(message, selectedDeviceIdRef.current);
+      lastHeavyUpdate.current = Date.now();
+    }
+  }, [updateStateFromDevices]);
 
   useEffect(() => {
     const saved = localStorage.getItem("pzem_max_power");
@@ -304,156 +404,55 @@ const PowerDashboard: React.FC = () => {
       if (res.ok) {
         const data: PzemDevice[] = await res.json();
         setDevices(data);
-        if (data.length > 0 && !selectedDeviceId) setSelectedDeviceId("all");
       }
     } catch (error) { console.error("Failed to fetch devices:", error); }
-  }, [selectedDeviceId]);
+  }, []);
 
   useEffect(() => { fetchDevices(); }, [fetchDevices]);
 
-
-  // 2. Initial state reset when device selection changes
-  // (WS first broadcast will populate chart/logs/data automatically)
+  // 2. Instant view update on device switch (no WS reconnect, no state wipe)
   useEffect(() => {
     if (!selectedDeviceId) return;
-    setRealtimeData(null);
-    setStatus("OFFLINE");
-    setRecentLogs([]);
-    setChartData([]);
-    setOutageLogs([]);
-    setOutageTotal(0);
-    setDeviceIsOnline(false);
-    setDeviceLastUpdateStr(null);
-  }, [selectedDeviceId]);
+    if (latestMessageRef.current) {
+      updateStateFromDevices(latestMessageRef.current, selectedDeviceId);
+    }
+  }, [selectedDeviceId, updateStateFromDevices]);
 
-  // 3. WebSocket Connection
+  // 3. WebSocket Connection (Permanent single connection)
   useEffect(() => {
     if (wsRef.current) wsRef.current.close();
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
+
     ws.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
-        // Support both old array shape and new { devices, serverBattery } shape
         const message: any[] = Array.isArray(payload) ? payload : (payload.devices ?? []);
         const serverBatteryPayload = payload.serverBattery ?? null;
 
         if (serverBatteryPayload) setServerBattery(serverBatteryPayload);
 
-        if (Array.isArray(message)) {
+        if (Array.isArray(message) && message.length > 0) {
+          latestMessageRef.current = message;
+          setIsWsInitialLoading(false);
+
           if (isHoveringChart.current) {
             pendingWsData.current = message;
           } else {
-            if (selectedDeviceId === "all") {
-              // Build per-device realtime map for split view
-              const newMap: Record<string, { data: any; isOnline: boolean }> = {};
-              message.forEach((d: any) => {
-                newMap[d.id] = {
-                  data: d.data || null,
-                  isOnline: d.isOnline === true
-                };
-              });
-              setAllDevicesRealtimeMap(newMap);
-
-              const activeDevs = message.filter((d: any) => d.isActive !== false && d.data);
-              if (activeDevs.length > 0) {
-                const totalEnergy = activeDevs.reduce((sum: number, d: any) => sum + (d.data.energy || 0), 0);
-                const totalPower = activeDevs.reduce((sum: number, d: any) => sum + (d.data.power || 0), 0);
-                const avgVoltage = activeDevs.reduce((sum: number, d: any) => sum + (d.data.voltage || 0), 0) / activeDevs.length;
-                const totalCurrent = activeDevs.reduce((sum: number, d: any) => sum + (d.data.current || 0), 0);
-                const avgFreq = activeDevs.reduce((sum: number, d: any) => sum + (d.data.frequency || 0), 0) / activeDevs.length;
-                const avgPf = activeDevs.reduce((sum: number, d: any) => sum + (d.data.pf || 0), 0) / activeDevs.length;
-
-                setRealtimeData({
-                  id: "all",
-                  voltage: avgVoltage,
-                  current: totalCurrent,
-                  power: totalPower,
-                  energy: totalEnergy,
-                  frequency: avgFreq,
-                  pf: avgPf,
-                  createdAt: new Date().toISOString()
-                });
-                setStatus("ONLINE");
-                setDeviceIsOnline(true);
-
-                // Aggregate recent logs from ALL devices — tag each log with device name, sort by time, top 20
-                const allLogs = message.flatMap((d: any) =>
-                  (d.logs || []).map((l: any) => ({ ...l, _deviceName: d.name }))
-                );
-                allLogs.sort((a: any, b: any) =>
-                  new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-                );
-                setRecentLogs(allLogs.slice(0, 20));
-
-                // Aggregate chart: merge all devices' chart data, sort by time, last 50
-                const allChart = message.flatMap((d: any) => d.chart || []);
-                allChart.sort((a: any, b: any) =>
-                  new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-                );
-                setChartData(allChart.slice(-50));
-
-                // Aggregate outage logs from ALL devices — tag with device name, sort by time, top 10
-                const allOutage = message.flatMap((d: any) =>
-                  (d.outageLogs || []).map((o: any) => ({ ...o, _deviceName: d.name }))
-                );
-                allOutage.sort((a: any, b: any) =>
-                  new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
-                );
-                setOutageLogs(allOutage.slice(0, 10));
-                setOutageTotal(message.reduce((sum: number, d: any) => sum + (d.outageTotal || 0), 0));
-              } else {
-                setRealtimeData(null);
-                setStatus("OFFLINE");
-                setRecentLogs([]);
-                setChartData([]);
-                setOutageLogs([]);
-                setOutageTotal(0);
-              }
-
-            } else {
-              const current = message.find((d: any) => d.id === selectedDeviceId);
-              if (current) {
-                if (current.hasRelay !== undefined) setActiveHasRelay(current.hasRelay);
-                if (current.relayState !== undefined) setActiveRelayState(current.relayState);
-                if (current.overcurrentThreshold !== undefined) setActiveThreshold(current.overcurrentThreshold);
-                if (current.overcurrentDelay !== undefined) setActiveDelay(current.overcurrentDelay);
-                if (current.autoReconnect !== undefined) setActiveAutoReconnect(current.autoReconnect);
-                if (current.reconnectDelay !== undefined) setActiveReconnectDelay(current.reconnectDelay);
-
-                if (current.data) {
-                  setRealtimeData({ id: current.id, ...current.data, createdAt: current.lastUpdate || new Date().toISOString() });
-                  setStatus("ONLINE");
-                  setDeviceIsOnline(current.isOnline === true);
-                  if (current.lastUpdate) {
-                    setDeviceLastUpdateStr(new Date(current.lastUpdate).toLocaleTimeString('id-ID', {
-                      timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit'
-                    }));
-                  }
-                  // Logs, chart, outage logs all come directly from WS — no HTTP refetch needed
-                  if (current.logs) setRecentLogs(current.logs);
-                  if (current.chart) setChartData(current.chart);
-                  if (current.outageLogs) {
-                    setOutageLogs(current.outageLogs);
-                    setOutageTotal(current.outageTotal ?? 0);
-                  }
-                } else {
-                  setRealtimeData(null);
-                  setStatus("OFFLINE");
-                  setRecentLogs([]);
-                  setChartData([]);
-                }
-              }
-            }
+            updateStateFromDevices(message, selectedDeviceIdRef.current);
           }
         }
       } catch (e) { console.error("WS Parse Error", e); }
     };
+
     ws.onopen = () => setWsStatus("CONNECTED");
     ws.onerror = () => { setStatus("OFFLINE"); setWsStatus("DISCONNECTED"); setDeviceIsOnline(false); };
     ws.onclose = () => { setStatus("OFFLINE"); setWsStatus("DISCONNECTED"); setDeviceIsOnline(false); };
-    return () => ws.close();
-  }, [selectedDeviceId]);
+
+    return () => {
+      ws.close();
+    };
+  }, [WS_URL, updateStateFromDevices]);
 
   // 4. Fetch kWh Usage Chart data
   const fetchUsageData = useCallback(async () => {
@@ -1420,19 +1419,35 @@ const PowerDashboard: React.FC = () => {
               <div className="flex flex-wrap gap-4 ml-auto">
                 <div className="text-center">
                   <div className="text-[10px] text-gray-500 uppercase tracking-wide">Total Daya</div>
-                  <div className="text-lg font-black text-yellow-600 dark:text-yellow-400">{displayData.power.toFixed(1)} <span className="text-xs font-medium">W</span></div>
+                  {isWsInitialLoading ? (
+                    <div className="h-6 w-16 bg-yellow-400/20 rounded animate-pulse my-0.5 mx-auto" />
+                  ) : (
+                    <div className="text-lg font-black text-yellow-600 dark:text-yellow-400">{displayData.power.toFixed(1)} <span className="text-xs font-medium">W</span></div>
+                  )}
                 </div>
                 <div className="text-center">
                   <div className="text-[10px] text-gray-500 uppercase tracking-wide">Total Arus</div>
-                  <div className="text-lg font-black text-red-600 dark:text-red-400">{displayData.current.toFixed(2)} <span className="text-xs font-medium">A</span></div>
+                  {isWsInitialLoading ? (
+                    <div className="h-6 w-14 bg-red-400/20 rounded animate-pulse my-0.5 mx-auto" />
+                  ) : (
+                    <div className="text-lg font-black text-red-600 dark:text-red-400">{displayData.current.toFixed(2)} <span className="text-xs font-medium">A</span></div>
+                  )}
                 </div>
                 <div className="text-center">
                   <div className="text-[10px] text-gray-500 uppercase tracking-wide">Rata-Rata Tegangan</div>
-                  <div className="text-lg font-black text-blue-600 dark:text-blue-400">{displayData.voltage.toFixed(1)} <span className="text-xs font-medium">V</span></div>
+                  {isWsInitialLoading ? (
+                    <div className="h-6 w-14 bg-blue-400/20 rounded animate-pulse my-0.5 mx-auto" />
+                  ) : (
+                    <div className="text-lg font-black text-blue-600 dark:text-blue-400">{displayData.voltage.toFixed(1)} <span className="text-xs font-medium">V</span></div>
+                  )}
                 </div>
                 <div className="text-center">
                   <div className="text-[10px] text-gray-500 uppercase tracking-wide">Total Energi</div>
-                  <div className="text-lg font-black text-green-600 dark:text-green-400">{displayData.energy.toFixed(2)} <span className="text-xs font-medium">kWh</span></div>
+                  {isWsInitialLoading ? (
+                    <div className="h-6 w-16 bg-green-400/20 rounded animate-pulse my-0.5 mx-auto" />
+                  ) : (
+                    <div className="text-lg font-black text-green-600 dark:text-green-400">{displayData.energy.toFixed(2)} <span className="text-xs font-medium">kWh</span></div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1452,6 +1467,8 @@ const PowerDashboard: React.FC = () => {
                     className={`relative overflow-hidden rounded-2xl border backdrop-blur-xl shadow-lg transition-all duration-300 ${
                       isOnline
                         ? 'bg-white/80 dark:bg-gray-800/70 border-white/60 dark:border-gray-700/60'
+                        : isWsInitialLoading
+                        ? 'bg-white/60 dark:bg-gray-800/50 border-gray-200/50 dark:border-gray-700/40'
                         : 'bg-gray-50/80 dark:bg-gray-900/60 border-gray-200/60 dark:border-gray-700/40 opacity-75'
                     }`}
                   >
@@ -1463,6 +1480,8 @@ const PowerDashboard: React.FC = () => {
                         <div className={`p-2 rounded-xl ${
                           isOnline
                             ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                            : isWsInitialLoading
+                            ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
                             : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
                         }`}>
                           <FaPlug size={14} />
@@ -1475,12 +1494,14 @@ const PowerDashboard: React.FC = () => {
                       <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${
                         isOnline
                           ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                          : isWsInitialLoading
+                          ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
                           : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-500'
                       }`}>
                         <div className={`w-1.5 h-1.5 rounded-full ${
-                          isOnline ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
+                          isOnline ? 'bg-green-500 animate-pulse' : isWsInitialLoading ? 'bg-amber-500 animate-pulse' : 'bg-gray-400'
                         }`} />
-                        {isOnline ? 'ONLINE' : 'OFFLINE'}
+                        {isOnline ? 'ONLINE' : isWsInitialLoading ? 'CONNECTING...' : 'OFFLINE'}
                       </div>
                     </div>
 
@@ -1492,8 +1513,13 @@ const PowerDashboard: React.FC = () => {
                           <FaBolt className="text-yellow-500" size={9} /> Daya Aktif
                         </div>
                         <div className="text-2xl font-black text-gray-800 dark:text-gray-100">
-                          {isOnline && d ? d.power.toFixed(1) : '—'}
-                          <span className="text-xs font-medium text-gray-400 ml-1">{isOnline ? 'W' : ''}</span>
+                          {isOnline && d ? (
+                            <>{d.power.toFixed(1)} <span className="text-xs font-medium text-gray-400 ml-1">W</span></>
+                          ) : isWsInitialLoading ? (
+                            <div className="h-7 w-16 bg-gray-200 dark:bg-gray-700/60 rounded animate-pulse my-0.5" />
+                          ) : (
+                            '—'
+                          )}
                         </div>
                         {isOnline && d && (
                           <div className="text-[10px] text-gray-400 mt-0.5">PF: {d.pf.toFixed(2)}</div>
@@ -1505,8 +1531,13 @@ const PowerDashboard: React.FC = () => {
                           <FaPlug className="text-blue-500" size={9} /> Tegangan
                         </div>
                         <div className="text-2xl font-black text-gray-800 dark:text-gray-100">
-                          {isOnline && d ? d.voltage.toFixed(1) : '—'}
-                          <span className="text-xs font-medium text-gray-400 ml-1">{isOnline ? 'V' : ''}</span>
+                          {isOnline && d ? (
+                            <>{d.voltage.toFixed(1)} <span className="text-xs font-medium text-gray-400 ml-1">V</span></>
+                          ) : isWsInitialLoading ? (
+                            <div className="h-7 w-16 bg-gray-200 dark:bg-gray-700/60 rounded animate-pulse my-0.5" />
+                          ) : (
+                            '—'
+                          )}
                         </div>
                         {isOnline && d && (
                           <div className="text-[10px] text-gray-400 mt-0.5">{d.frequency.toFixed(1)} Hz</div>
@@ -1518,8 +1549,13 @@ const PowerDashboard: React.FC = () => {
                           <FaTachometerAlt className="text-red-500" size={9} /> Arus
                         </div>
                         <div className="text-2xl font-black text-gray-800 dark:text-gray-100">
-                          {isOnline && d ? d.current.toFixed(2) : '—'}
-                          <span className="text-xs font-medium text-gray-400 ml-1">{isOnline ? 'A' : ''}</span>
+                          {isOnline && d ? (
+                            <>{d.current.toFixed(2)} <span className="text-xs font-medium text-gray-400 ml-1">A</span></>
+                          ) : isWsInitialLoading ? (
+                            <div className="h-7 w-14 bg-gray-200 dark:bg-gray-700/60 rounded animate-pulse my-0.5" />
+                          ) : (
+                            '—'
+                          )}
                         </div>
                       </div>
                       {/* Energy */}
@@ -1528,8 +1564,13 @@ const PowerDashboard: React.FC = () => {
                           <FaLeaf className="text-green-500" size={9} /> Energi
                         </div>
                         <div className="text-2xl font-black text-gray-800 dark:text-gray-100">
-                          {isOnline && d ? d.energy.toFixed(2) : '—'}
-                          <span className="text-xs font-medium text-gray-400 ml-1">{isOnline ? 'kWh' : ''}</span>
+                          {isOnline && d ? (
+                            <>{d.energy.toFixed(2)} <span className="text-xs font-medium text-gray-400 ml-1">kWh</span></>
+                          ) : isWsInitialLoading ? (
+                            <div className="h-7 w-16 bg-gray-200 dark:bg-gray-700/60 rounded animate-pulse my-0.5" />
+                          ) : (
+                            '—'
+                          )}
                         </div>
                         {isOnline && d && (
                           <div className="text-[10px] text-gray-400 mt-0.5">~Rp {(d.energy * PLN_RATE).toLocaleString('id-ID', { maximumFractionDigits: 0 })}</div>
@@ -1553,10 +1594,10 @@ const PowerDashboard: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <CardMetric title="Total Energy (Month)" value={displayData.energy.toFixed(2)} unit="kWh" icon={<FaLeaf />} color="text-green-500" subValue={`Est. Cost: Rp ${(displayData.energy * PLN_RATE).toLocaleString('id-ID', { maximumFractionDigits: 0 })}`} />
+            <CardMetric title="Total Energy (Month)" value={displayData.energy.toFixed(2)} unit="kWh" icon={<FaLeaf />} color="text-green-500" subValue={`Est. Cost: Rp ${(displayData.energy * PLN_RATE).toLocaleString('id-ID', { maximumFractionDigits: 0 })}`} isLoading={isWsInitialLoading} />
             <CardMetric title="Active Power" value={displayData.power.toFixed(1)} unit="W" icon={<FaBolt />} color="text-yellow-500" subValue={`PF: ${displayData.pf.toFixed(2)}`} />
-            <CardMetric title="Voltage" value={displayData.voltage.toFixed(1)} unit="V" icon={<FaPlug />} color="text-blue-500" subValue={`Freq: ${displayData.frequency.toFixed(1)} Hz`} />
-            <CardMetric title="Current" value={displayData.current.toFixed(2)} unit="A" icon={<FaTachometerAlt />} color="text-red-500" />
+            <CardMetric title="Voltage" value={displayData.voltage.toFixed(1)} unit="V" icon={<FaPlug />} color="text-blue-500" subValue={`Freq: ${displayData.frequency.toFixed(1)} Hz`} isLoading={isWsInitialLoading} />
+            <CardMetric title="Current" value={displayData.current.toFixed(2)} unit="A" icon={<FaTachometerAlt />} color="text-red-500" isLoading={isWsInitialLoading} />
           </div>
         )}
 
