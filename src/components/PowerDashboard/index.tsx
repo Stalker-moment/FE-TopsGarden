@@ -953,8 +953,14 @@ const PowerDashboard: React.FC = () => {
   }, [selectedUsageMetric, usageView, minutelyUsage, hourlyUsage, dailyUsage, todayLiveUsage, getOutageSummaryForRange, usageYear, usageMonth, usageDay, usageHour, todayDateLabel, isCurrentMonth]);
 
   const usageSummary = useMemo(() => {
-    const liveAdd = (isCurrentMonth && todayLiveUsage) ? todayLiveUsage.kwh : 0;
     const devLabel = chartDeviceId === "all" ? "Semua Alat" : devices.find(d => d.id === chartDeviceId)?.name || "Alat";
+
+    // Cari konsumsi hari ini yang sudah dihitung oleh backend
+    const todayItem = isCurrentMonth && dailyUsage ? dailyUsage.days.find(d => d.dateLabel === todayDateLabel) : null;
+    const todayBackendKwh = todayItem ? (todayItem.usageKwh || 0) : 0;
+    // Selisih antara live realtime hari ini dengan yang sudah masuk kalkulasi backend (agar tidak double counting)
+    const liveDiff = (isCurrentMonth && todayLiveUsage !== null) ? (todayLiveUsage.kwh - todayBackendKwh) : 0;
+
     if (usageView === "minutely" && minutelyUsage) {
       return {
         total: minutelyUsage.totalKwh,
@@ -970,11 +976,11 @@ const PowerDashboard: React.FC = () => {
       };
     }
     if (usageView === "daily" && dailyUsage) {
-      const total = parseFloat((dailyUsage.totalKwh + liveAdd).toFixed(3));
+      const total = parseFloat(Math.max(0, dailyUsage.totalKwh + liveDiff).toFixed(3));
       return { total, cost: parseFloat((total * PLN_RATE).toFixed(0)), label: `${MONTH_NAMES[usageMonth - 1]} ${usageYear} • ${devLabel}` };
     }
     if (usageView === "monthly" && monthlyUsage) {
-      const total = parseFloat((monthlyUsage.totalKwh + liveAdd).toFixed(3));
+      const total = parseFloat(Math.max(0, monthlyUsage.totalKwh + liveDiff).toFixed(3));
       return { total, cost: parseFloat((total * PLN_RATE).toFixed(0)), label: `Tahun ${usageYear} • ${devLabel}` };
     }
     if (usageView === "yearly" && yearlyUsage) {
@@ -982,7 +988,7 @@ const PowerDashboard: React.FC = () => {
       return { total: parseFloat(total.toFixed(3)), cost: parseFloat((total * PLN_RATE).toFixed(0)), label: `5 Tahun Terakhir • ${devLabel}` };
     }
     return { total: 0, cost: 0, label: "" };
-  }, [usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, usageYear, usageMonth, usageDay, usageHour, todayLiveUsage, isCurrentMonth, chartDeviceId, devices]);
+  }, [usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, usageYear, usageMonth, usageDay, usageHour, todayLiveUsage, isCurrentMonth, chartDeviceId, devices, todayDateLabel]);
 
   // Helper to reliably resolve device name from log/outage item
   const getLogDeviceName = useCallback((log: any) => {
