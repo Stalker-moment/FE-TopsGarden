@@ -32,7 +32,8 @@ import {
   FaMobileAlt,
   FaTimes,
   FaPowerOff,
-  FaTimesCircle
+  FaTimesCircle,
+  FaFilter
 } from "react-icons/fa";
 import { MdElectricBolt } from "react-icons/md";
 import { ApexOptions } from "apexcharts";
@@ -114,8 +115,17 @@ const PowerDashboard: React.FC = () => {
   const [isWsInitialLoading, setIsWsInitialLoading] = useState<boolean>(true);
   const latestMessageRef = useRef<any[] | null>(null);
 
+  // Device Filter for the Usage Chart (defaults to "all")
+  const [chartDeviceId, setChartDeviceId] = useState<string>("all");
+
+  // Device Filter for Recent Logs table (when in combined view)
+  const [recentLogsFilter, setRecentLogsFilter] = useState<string>("all");
+
   useEffect(() => {
     selectedDeviceIdRef.current = selectedDeviceId;
+    if (selectedDeviceId) {
+      setChartDeviceId(selectedDeviceId);
+    }
   }, [selectedDeviceId]);
   const [realtimeData, setRealtimeData] = useState<PzemData | null>(null);
   const [status, setStatus] = useState<"ONLINE" | "OFFLINE">("OFFLINE");
@@ -301,25 +311,42 @@ const PowerDashboard: React.FC = () => {
         setStatus("ONLINE");
         setDeviceIsOnline(true);
 
-        // Aggregate recent logs from ALL devices — tag each log with device name, sort by time, top 20
+        // Aggregate recent logs from ALL devices — tag each log with device name & id, sort by time, top 20
         const allLogs = message.flatMap((d: any) =>
-          (d.logs || []).map((l: any) => ({ ...l, _deviceName: d.name }))
+          (d.logs || []).map((l: any) => ({
+            ...l,
+            deviceId: d.id,
+            deviceName: d.name,
+            _deviceName: d.name
+          }))
         );
         allLogs.sort((a: any, b: any) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
-        setRecentLogs(allLogs.slice(0, 20));
+        setRecentLogs(allLogs.slice(0, 50));
 
         // Aggregate chart: merge all devices' chart data, sort by time, last 50
-        const allChart = message.flatMap((d: any) => d.chart || []);
+        const allChart = message.flatMap((d: any) =>
+          (d.chart || []).map((c: any) => ({
+            ...c,
+            deviceId: d.id,
+            deviceName: d.name,
+            _deviceName: d.name
+          }))
+        );
         allChart.sort((a: any, b: any) =>
           new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
         );
         setChartData(allChart.slice(-50));
 
-        // Aggregate outage logs from ALL devices — tag with device name, sort by time, top 10
+        // Aggregate outage logs from ALL devices — tag with device name & id, sort by time, top 10
         const allOutage = message.flatMap((d: any) =>
-          (d.outageLogs || []).map((o: any) => ({ ...o, _deviceName: d.name }))
+          (d.outageLogs || []).map((o: any) => ({
+            ...o,
+            deviceId: d.id,
+            deviceName: d.name,
+            _deviceName: d.name
+          }))
         );
         allOutage.sort((a: any, b: any) =>
           new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
@@ -353,10 +380,29 @@ const PowerDashboard: React.FC = () => {
               timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit'
             }));
           }
-          if (current.logs) setRecentLogs(current.logs);
-          if (current.chart) setChartData(current.chart);
+          if (current.logs) {
+            setRecentLogs((current.logs || []).map((l: any) => ({
+              ...l,
+              deviceId: current.id,
+              deviceName: current.name,
+              _deviceName: current.name
+            })));
+          }
+          if (current.chart) {
+            setChartData((current.chart || []).map((c: any) => ({
+              ...c,
+              deviceId: current.id,
+              deviceName: current.name,
+              _deviceName: current.name
+            })));
+          }
           if (current.outageLogs) {
-            setOutageLogs(current.outageLogs);
+            setOutageLogs((current.outageLogs || []).map((o: any) => ({
+              ...o,
+              deviceId: current.id,
+              deviceName: current.name,
+              _deviceName: current.name
+            })));
             setOutageTotal(current.outageTotal ?? 0);
           }
         } else {
@@ -456,29 +502,29 @@ const PowerDashboard: React.FC = () => {
 
   // 4. Fetch kWh Usage Chart data
   const fetchUsageData = useCallback(async () => {
-    if (!selectedDeviceId) return;
+    const devId = chartDeviceId || selectedDeviceId || "all";
     setUsageLoading(true);
     try {
       const dateStr = `${usageYear}-${String(usageMonth).padStart(2, '0')}-${String(usageDay).padStart(2, '0')}`;
       if (usageView === "minutely") {
-        const res = await fetch(`${API_URL}/api/device/pzem/${selectedDeviceId}/minutely-usage?date=${dateStr}&hour=${usageHour}`);
+        const res = await fetch(`${API_URL}/api/device/pzem/${devId}/minutely-usage?date=${dateStr}&hour=${usageHour}`);
         if (res.ok) setMinutelyUsage(await res.json());
       } else if (usageView === "hourly") {
-        const res = await fetch(`${API_URL}/api/device/pzem/${selectedDeviceId}/hourly-usage?date=${dateStr}`);
+        const res = await fetch(`${API_URL}/api/device/pzem/${devId}/hourly-usage?date=${dateStr}`);
         if (res.ok) setHourlyUsage(await res.json());
       } else if (usageView === "daily") {
-        const res = await fetch(`${API_URL}/api/device/pzem/${selectedDeviceId}/daily-usage?year=${usageYear}&month=${usageMonth}`);
+        const res = await fetch(`${API_URL}/api/device/pzem/${devId}/daily-usage?year=${usageYear}&month=${usageMonth}`);
         if (res.ok) setDailyUsage(await res.json());
       } else if (usageView === "monthly") {
-        const res = await fetch(`${API_URL}/api/device/pzem/${selectedDeviceId}/monthly-usage?year=${usageYear}`);
+        const res = await fetch(`${API_URL}/api/device/pzem/${devId}/monthly-usage?year=${usageYear}`);
         if (res.ok) setMonthlyUsage(await res.json());
       } else {
-        const res = await fetch(`${API_URL}/api/device/pzem/${selectedDeviceId}/yearly-usage`);
+        const res = await fetch(`${API_URL}/api/device/pzem/${devId}/yearly-usage`);
         if (res.ok) setYearlyUsage(await res.json());
       }
     } catch (e) { console.error("Usage fetch error", e); }
     setUsageLoading(false);
-  }, [selectedDeviceId, usageView, usageYear, usageMonth, usageDay, usageHour]);
+  }, [chartDeviceId, selectedDeviceId, usageView, usageYear, usageMonth, usageDay, usageHour]);
 
   useEffect(() => { fetchUsageData(); }, [fetchUsageData]);
 
@@ -546,7 +592,9 @@ const PowerDashboard: React.FC = () => {
 
   const todayLiveUsage = useMemo(() => {
     if (!realtimeData || !isCurrentMonth) return null;
-    const liveEnergy = realtimeData.energy;
+    const liveEnergy = chartDeviceId === "all"
+      ? realtimeData.energy
+      : (allDevicesRealtimeMap[chartDeviceId]?.data?.energy ?? (chartDeviceId === selectedDeviceId ? realtimeData.energy : 0));
 
     if (dailyUsage && dailyUsage.days.length > 0) {
       // Cari index hari ini (misal "05 Jul")
@@ -578,7 +626,7 @@ const PowerDashboard: React.FC = () => {
       return { kwh: parseFloat(liveEnergy.toFixed(3)), isReset: false };
     }
     return null;
-  }, [realtimeData, dailyUsage, isCurrentMonth, todayDateLabel]);
+  }, [realtimeData, dailyUsage, isCurrentMonth, todayDateLabel, chartDeviceId, allDevicesRealtimeMap, selectedDeviceId]);
 
   // Helper check if a timestamp (ms) falls into a recorded outage event
   const isOutageAt = useCallback((timestampMs: number) => {
@@ -817,34 +865,70 @@ const PowerDashboard: React.FC = () => {
 
   const usageSummary = useMemo(() => {
     const liveAdd = (isCurrentMonth && todayLiveUsage) ? todayLiveUsage.kwh : 0;
+    const devLabel = chartDeviceId === "all" ? "Semua Alat" : devices.find(d => d.id === chartDeviceId)?.name || "Alat";
     if (usageView === "minutely" && minutelyUsage) {
       return {
         total: minutelyUsage.totalKwh,
         cost: minutelyUsage.estimatedCost,
-        label: `Jam ${String(usageHour).padStart(2, '0')}:00, ${usageDay} ${MONTH_NAMES[usageMonth - 1]}`
+        label: `Jam ${String(usageHour).padStart(2, '0')}:00, ${usageDay} ${MONTH_NAMES[usageMonth - 1]} • ${devLabel}`
       };
     }
     if (usageView === "hourly" && hourlyUsage) {
       return {
         total: hourlyUsage.totalKwh,
         cost: hourlyUsage.estimatedCost,
-        label: `24 Jam — ${usageDay} ${MONTH_NAMES[usageMonth - 1]} ${usageYear}`
+        label: `24 Jam — ${usageDay} ${MONTH_NAMES[usageMonth - 1]} ${usageYear} • ${devLabel}`
       };
     }
     if (usageView === "daily" && dailyUsage) {
       const total = parseFloat((dailyUsage.totalKwh + liveAdd).toFixed(3));
-      return { total, cost: parseFloat((total * PLN_RATE).toFixed(0)), label: `${MONTH_NAMES[usageMonth - 1]} ${usageYear}` };
+      return { total, cost: parseFloat((total * PLN_RATE).toFixed(0)), label: `${MONTH_NAMES[usageMonth - 1]} ${usageYear} • ${devLabel}` };
     }
     if (usageView === "monthly" && monthlyUsage) {
       const total = parseFloat((monthlyUsage.totalKwh + liveAdd).toFixed(3));
-      return { total, cost: parseFloat((total * PLN_RATE).toFixed(0)), label: `Tahun ${usageYear}` };
+      return { total, cost: parseFloat((total * PLN_RATE).toFixed(0)), label: `Tahun ${usageYear} • ${devLabel}` };
     }
     if (usageView === "yearly" && yearlyUsage) {
       const total = yearlyUsage.years.reduce((s, y) => s + y.usageKwh, 0);
-      return { total: parseFloat(total.toFixed(3)), cost: parseFloat((total * PLN_RATE).toFixed(0)), label: "5 Tahun Terakhir" };
+      return { total: parseFloat(total.toFixed(3)), cost: parseFloat((total * PLN_RATE).toFixed(0)), label: `5 Tahun Terakhir • ${devLabel}` };
     }
     return { total: 0, cost: 0, label: "" };
-  }, [usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, usageYear, usageMonth, usageDay, usageHour, todayLiveUsage, isCurrentMonth]);
+  }, [usageView, minutelyUsage, hourlyUsage, dailyUsage, monthlyUsage, yearlyUsage, usageYear, usageMonth, usageDay, usageHour, todayLiveUsage, isCurrentMonth, chartDeviceId, devices]);
+
+  // Helper to reliably resolve device name from log/outage item
+  const getLogDeviceName = useCallback((log: any) => {
+    if (log.deviceName && log.deviceName !== "Unknown") return log.deviceName;
+    if (log._deviceName && log._deviceName !== "Unknown") return log._deviceName;
+    if (log.deviceId) {
+      const found = devices.find(d => d.id === log.deviceId);
+      if (found?.name) return found.name;
+    }
+    return "Alat";
+  }, [devices]);
+
+  // Helper to get consistent color-coded badge styles for devices
+  const getDeviceBadgeStyle = useCallback((name: string) => {
+    const lower = (name || "").toLowerCase();
+    if (lower.includes("kamar")) {
+      return "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800";
+    }
+    if (lower.includes("kos")) {
+      return "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800";
+    }
+    return "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800";
+  }, []);
+
+  // Filtered recent logs based on recentLogsFilter
+  const displayedRecentLogs = useMemo(() => {
+    if (recentLogsFilter === "all" || selectedDeviceId !== "all") {
+      return recentLogs.slice(0, 20);
+    }
+    const targetDev = devices.find(d => d.id === recentLogsFilter);
+    return recentLogs.filter(l => {
+      const devName = getLogDeviceName(l);
+      return l.deviceId === recentLogsFilter || (targetDev && devName === targetDev.name);
+    }).slice(0, 20);
+  }, [recentLogs, recentLogsFilter, selectedDeviceId, devices, getLogDeviceName]);
 
   // Join arrays into stable string keys for chart options memoization
   const usageBarColorsKey = (usageBarColors || []).join(",");
@@ -1840,7 +1924,7 @@ const PowerDashboard: React.FC = () => {
               <div className="fixed inset-0 z-40 bg-transparent" onClick={() => setActivePicker(null)} />
             )}
             <div>
-              <h3 className="text-xl font-bold flex items-center gap-2">
+              <h3 className="text-xl font-bold flex flex-wrap items-center gap-2">
                 <FaChartBar className="text-blue-500" />
                 Konsumsi &mdash; {
                   usageView === "minutely" ? `Jam ${String(usageHour).padStart(2,'0')}:00, ${usageDay} ${MONTH_NAMES[usageMonth - 1]}` :
@@ -1849,6 +1933,16 @@ const PowerDashboard: React.FC = () => {
                   usageView === "monthly" ? `Tahun ${usageYear}` :
                   "5 Tahun Terakhir"
                 }
+
+                {/* Device Badge */}
+                <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full border ${
+                  chartDeviceId === "all"
+                    ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-700"
+                    : "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-700"
+                }`}>
+                  {chartDeviceId === "all" ? <FaBolt size={10} /> : <FaPlug size={10} />}
+                  {chartDeviceId === "all" ? "Semua Alat (Total)" : (devices.find(d => d.id === chartDeviceId)?.name ?? "Alat")}
+                </span>
 
                 {/* Live badge — tampil saat melihat bulan ini & device online */}
                 {isCurrentMonth && status === "ONLINE" && usageView !== "yearly" && (
@@ -1869,6 +1963,40 @@ const PowerDashboard: React.FC = () => {
 
             {/* Controls */}
             <div className="flex flex-wrap items-center gap-2">
+
+              {/* Device Selector for Chart */}
+              {devices.length > 0 && (
+                <div className="flex items-center bg-gray-100 dark:bg-gray-700/60 rounded-xl p-1 gap-1 shrink-0 overflow-x-auto max-w-full no-scrollbar">
+                  <span className="text-[10px] font-bold text-gray-400 dark:text-gray-400 uppercase px-2 flex items-center gap-1">
+                    <FaFilter size={9} /> Alat:
+                  </span>
+                  <button
+                    onClick={() => setChartDeviceId("all")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                      chartDeviceId === "all"
+                        ? "bg-yellow-500 text-white shadow-sm"
+                        : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    <FaBolt size={10} />
+                    <span>Semua Alat</span>
+                  </button>
+                  {devices.map(dev => (
+                    <button
+                      key={dev.id}
+                      onClick={() => setChartDeviceId(dev.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                        chartDeviceId === dev.id
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                      }`}
+                    >
+                      <FaPlug size={10} />
+                      <span>{dev.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Metric Selector (kWh / Voltage / Current) */}
               <div className="flex bg-gray-100 dark:bg-gray-700/60 rounded-xl p-1 gap-1 shrink-0 overflow-x-auto max-w-full no-scrollbar">
@@ -2595,6 +2723,7 @@ const PowerDashboard: React.FC = () => {
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-gray-50/80 dark:bg-gray-900/40 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-widest">
+                  {selectedDeviceId === "all" && <th className="py-3 px-5 font-bold">Device</th>}
                   <th className="py-3 px-5 font-bold">Status</th>
                   <th className="py-3 px-5 font-bold">Mulai Padam</th>
                   <th className="py-3 px-5 font-bold">Selesai / Menyala</th>
@@ -2605,7 +2734,7 @@ const PowerDashboard: React.FC = () => {
               <tbody className="text-sm cursor-default divide-y divide-gray-100 dark:divide-gray-700/50">
                 {outageLoading ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-gray-400">
+                    <td colSpan={selectedDeviceId === "all" ? 6 : 5} className="py-8 text-center text-gray-400">
                       <span className="w-5 h-5 border-2 border-red-500 border-t-transparent rounded-full animate-spin inline-block mr-2" />
                       Memuat data mati listrik...
                     </td>
@@ -2613,6 +2742,19 @@ const PowerDashboard: React.FC = () => {
                 ) : outageLogs.length > 0 ? (
                   outageLogs.map((log, idx) => (
                     <tr key={log.id} className={`group transition-colors duration-150 ${idx % 2 === 0 ? 'bg-white/40 dark:bg-transparent' : 'bg-gray-50/60 dark:bg-gray-900/20'} hover:bg-red-50/40 dark:hover:bg-red-950/20`}>
+                      {selectedDeviceId === "all" && (
+                        <td className="py-3.5 px-5">
+                          {(() => {
+                            const devName = getLogDeviceName(log);
+                            return (
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${getDeviceBadgeStyle(devName)}`}>
+                                <FaPlug size={10} />
+                                {devName}
+                              </span>
+                            );
+                          })()}
+                        </td>
+                      )}
                       <td className="py-3.5 px-5">
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
                           log.status === "BERLANGSUNG"
@@ -2643,7 +2785,7 @@ const PowerDashboard: React.FC = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="py-10 text-center">
+                    <td colSpan={selectedDeviceId === "all" ? 6 : 5} className="py-10 text-center">
                       <div className="flex flex-col items-center gap-2 text-gray-400 dark:text-gray-500">
                         <FaCheckCircle size={26} className="text-green-500/60" />
                         <p className="text-sm font-semibold">Tidak ada catatan mati listrik</p>
@@ -2685,13 +2827,50 @@ const PowerDashboard: React.FC = () => {
         {/* History Table */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
           className="rounded-[2rem] bg-white/60 dark:bg-gray-800/60 backdrop-blur-md border border-white/50 dark:border-gray-700 overflow-hidden shadow-lg">
-          <div className="px-6 md:px-8 py-5 bg-gradient-to-r from-blue-600/10 via-indigo-600/5 to-transparent border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-            <h3 className="text-xl font-bold flex items-center gap-2 text-gray-800 dark:text-white">
-              <span className="p-2 rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400"><FaHistory size={14}/></span>
-              Recent Logs
-            </h3>
+          <div className="px-6 md:px-8 py-5 bg-gradient-to-r from-blue-600/10 via-indigo-600/5 to-transparent border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <h3 className="text-xl font-bold flex items-center gap-2 text-gray-800 dark:text-white">
+                <span className="p-2 rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400"><FaHistory size={14}/></span>
+                Recent Logs
+              </h3>
+
+              {/* Filter by Device Pills in Combined View */}
+              {selectedDeviceId === "all" && devices.length > 0 && (
+                <div className="flex items-center bg-gray-100 dark:bg-gray-700/60 rounded-xl p-1 gap-1">
+                  <button
+                    onClick={() => setRecentLogsFilter("all")}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                      recentLogsFilter === "all"
+                        ? "bg-yellow-500 text-white shadow-sm"
+                        : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    <FaBolt size={9} />
+                    <span>Semua ({recentLogs.length})</span>
+                  </button>
+                  {devices.map(dev => {
+                    const count = recentLogs.filter(l => l.deviceId === dev.id || getLogDeviceName(l) === dev.name).length;
+                    return (
+                      <button
+                        key={dev.id}
+                        onClick={() => setRecentLogsFilter(dev.id)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                          recentLogsFilter === dev.id
+                            ? "bg-blue-600 text-white shadow-sm"
+                            : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                        }`}
+                      >
+                        <FaPlug size={9} />
+                        <span>{dev.name} ({count})</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <span className="text-xs font-semibold px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
-              {recentLogs.length} entries
+              {displayedRecentLogs.length} entries
             </span>
           </div>
           <div className="overflow-x-auto">
@@ -2707,14 +2886,22 @@ const PowerDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="text-sm cursor-default divide-y divide-gray-100 dark:divide-gray-700/50">
-                {recentLogs.length > 0 ? recentLogs.map((log, idx) => {
+                {displayedRecentLogs.length > 0 ? displayedRecentLogs.map((log, idx) => {
                   const isHighPower = log.power > 100;
                   const isMidPower = log.power > 30;
                   return (
                     <tr key={log.id} className={`group transition-colors duration-150 ${idx % 2 === 0 ? 'bg-white/40 dark:bg-transparent' : 'bg-gray-50/60 dark:bg-gray-900/20'} hover:bg-blue-50/60 dark:hover:bg-blue-900/10`}>
                       {selectedDeviceId === "all" && (
-                        <td className="py-3.5 px-5 font-semibold text-gray-600 dark:text-gray-400 text-xs">
-                          {log.deviceName || "Unknown"}
+                        <td className="py-3.5 px-5">
+                          {(() => {
+                            const devName = getLogDeviceName(log);
+                            return (
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${getDeviceBadgeStyle(devName)}`}>
+                                <FaPlug size={10} />
+                                {devName}
+                              </span>
+                            );
+                          })()}
                         </td>
                       )}
                       <td className="py-3.5 px-5"><span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-lg">{new Date(log.createdAt).toLocaleString('id-ID', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span></td>
