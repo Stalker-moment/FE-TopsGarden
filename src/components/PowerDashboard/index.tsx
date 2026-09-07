@@ -498,7 +498,7 @@ const PowerDashboard: React.FC = () => {
     return () => {
       ws.close();
     };
-  }, [WS_URL, updateStateFromDevices]);
+  }, [updateStateFromDevices]);
 
   // 4. Fetch kWh Usage Chart data
   const fetchUsageData = useCallback(async () => {

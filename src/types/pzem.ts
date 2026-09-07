@@ -39,6 +39,9 @@ export interface PzemLog {
   pf: number;
   createdAt: string;
   deviceName?: string;
+  deviceId?: string;
+  deviceLocation?: string;
+  _deviceName?: string;
 }
 
 export interface PzemWebSocketData {
@@ -166,6 +169,7 @@ export interface PowerOutageLogItem {
   createdAt: string;
   deviceName?: string;
   location?: string;
+  _deviceName?: string;
 }
 
 export interface PowerOutageLogsResponse {
