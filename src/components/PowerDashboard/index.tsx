@@ -55,6 +55,7 @@ const API_URL = `https://${HTTPS_API_URL}`;
 const WS_URL = process.env.NEXT_PUBLIC_WS_PZEM_URL || `wss://${HTTPS_API_URL}/pzem`;
 const PLN_RATE = 1444.70;
 const MONTH_NAMES = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+const DEVICE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
 
 // ─────────────────────────────────────────────
 // Sub-Components
@@ -121,10 +122,17 @@ const PowerDashboard: React.FC = () => {
   // Device Filter for Recent Logs table (when in combined view)
   const [recentLogsFilter, setRecentLogsFilter] = useState<string>("all");
 
+  // Filter for Live Trend Chart (defaults to "combined")
+  const [trendFilter, setTrendFilter] = useState<string>("combined"); // "combined" | "multi" | dev.id
+  const [deviceChartsMap, setDeviceChartsMap] = useState<Record<string, PzemLog[]>>({});
+
   useEffect(() => {
     selectedDeviceIdRef.current = selectedDeviceId;
     if (selectedDeviceId) {
       setChartDeviceId(selectedDeviceId);
+      if (selectedDeviceId === "all") {
+        setTrendFilter("combined");
+      }
     }
   }, [selectedDeviceId]);
   const [realtimeData, setRealtimeData] = useState<PzemData | null>(null);
@@ -278,15 +286,25 @@ const PowerDashboard: React.FC = () => {
   const updateStateFromDevices = useCallback((message: any[], devId: string) => {
     if (!Array.isArray(message)) return;
 
-    // Build per-device realtime map for split view
+    // Build per-device realtime map and individual device chart map
     const newMap: Record<string, { data: any; isOnline: boolean }> = {};
+    const newChartsMap: Record<string, PzemLog[]> = {};
     message.forEach((d: any) => {
       newMap[d.id] = {
         data: d.data || null,
         isOnline: d.isOnline === true
       };
+      if (d.chart && Array.isArray(d.chart)) {
+        newChartsMap[d.id] = d.chart.map((c: any) => ({
+          ...c,
+          deviceId: d.id,
+          deviceName: d.name,
+          _deviceName: d.name
+        }));
+      }
     });
     setAllDevicesRealtimeMap(newMap);
+    setDeviceChartsMap(newChartsMap);
 
     if (devId === "all") {
       const activeDevs = message.filter((d: any) => d.isActive !== false && d.data);
@@ -325,19 +343,65 @@ const PowerDashboard: React.FC = () => {
         );
         setRecentLogs(allLogs.slice(0, 50));
 
-        // Aggregate chart: merge all devices' chart data, sort by time, last 50
-        const allChart = message.flatMap((d: any) =>
-          (d.chart || []).map((c: any) => ({
-            ...c,
-            deviceId: d.id,
-            deviceName: d.name,
-            _deviceName: d.name
-          }))
-        );
-        allChart.sort((a: any, b: any) =>
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        );
-        setChartData(allChart.slice(-50));
+        // Synchronized Combined Chart from ALL active devices:
+        // Merge timestamps, hold last known values per device, and calculate true total load
+        const allItems: (PzemLog & { devId: string })[] = [];
+        const activeDevsWithChart = message.filter((d: any) => d.isActive !== false && d.chart && Array.isArray(d.chart));
+        activeDevsWithChart.forEach((d: any) => {
+          (d.chart || []).forEach((c: any) => {
+            allItems.push({
+              ...c,
+              devId: d.id,
+              deviceId: d.id,
+              deviceName: d.name,
+              _deviceName: d.name
+            });
+          });
+        });
+
+        allItems.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+        // Track last known values for each device to compute the true combined total at every timestamp
+        const lastKnown: Record<string, { power: number; voltage: number; current: number }> = {};
+        allItems.forEach(item => {
+          if (!lastKnown[item.devId]) {
+            lastKnown[item.devId] = {
+              power: Number(item.power) || 0,
+              voltage: Number(item.voltage) || 0,
+              current: Number(item.current) || 0
+            };
+          }
+        });
+
+        const combinedPoints: PzemLog[] = [];
+        allItems.forEach(item => {
+          lastKnown[item.devId] = {
+            power: Number(item.power) || 0,
+            voltage: Number(item.voltage) || 0,
+            current: Number(item.current) || 0
+          };
+
+          const values = Object.values(lastKnown);
+          const totP = values.reduce((s, v) => s + v.power, 0);
+          const totI = values.reduce((s, v) => s + v.current, 0);
+          const avgV = values.length > 0 ? values.reduce((s, v) => s + v.voltage, 0) / values.length : 0;
+
+          combinedPoints.push({
+            id: `comb-${item.createdAt}-${item.devId}`,
+            createdAt: item.createdAt,
+            power: Number(totP.toFixed(1)),
+            voltage: Number(avgV.toFixed(1)),
+            current: Number(totI.toFixed(2)),
+            energy: 0,
+            frequency: 50,
+            pf: 1,
+            deviceId: "all",
+            deviceName: "Total Semua Alat",
+            _deviceName: "Total Semua Alat"
+          });
+        });
+
+        setChartData(combinedPoints.slice(-50));
 
         // Aggregate outage logs from ALL devices — tag with device name & id, sort by time, top 10
         const allOutage = message.flatMap((d: any) =>
@@ -1052,25 +1116,110 @@ const PowerDashboard: React.FC = () => {
     const colors: string[] = [];
     const yAxis: any[] = [];
 
-    if (activeMetrics.power) {
-      series.push({ name: "Power (W)", data: chartData.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.power })) });
-      colors.push('#f59e0b');
-      yAxis.push({ seriesName: 'Power (W)', show: true, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (val: number) => val.toFixed(1) } });
+    const isAll = selectedDeviceId === "all";
+
+    if (isAll && trendFilter === "multi") {
+      // Multi-room mode: each room has its own curve in 1 chart
+      if (activeMetrics.power) {
+        devices.forEach((dev, idx) => {
+          const devChart = deviceChartsMap[dev.id] || [];
+          series.push({
+            name: `${dev.name} (W)`,
+            data: devChart.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.power }))
+          });
+          colors.push(DEVICE_COLORS[idx % DEVICE_COLORS.length]);
+        });
+        yAxis.push({
+          seriesName: 'Power (W)',
+          show: true,
+          labels: {
+            style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' },
+            formatter: (val: number) => val.toFixed(1)
+          }
+        });
+      }
+      if (activeMetrics.voltage) {
+        devices.forEach((dev, idx) => {
+          const devChart = deviceChartsMap[dev.id] || [];
+          series.push({
+            name: `${dev.name} (V)`,
+            data: devChart.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.voltage }))
+          });
+          colors.push(DEVICE_COLORS[(idx + 2) % DEVICE_COLORS.length]);
+        });
+        yAxis.push({
+          seriesName: 'Voltage (V)',
+          opposite: yAxis.length > 0,
+          show: true,
+          labels: {
+            style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' },
+            formatter: (val: number) => val.toFixed(1)
+          }
+        });
+      }
+      if (activeMetrics.current) {
+        devices.forEach((dev, idx) => {
+          const devChart = deviceChartsMap[dev.id] || [];
+          series.push({
+            name: `${dev.name} (A)`,
+            data: devChart.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.current }))
+          });
+          colors.push(DEVICE_COLORS[(idx + 4) % DEVICE_COLORS.length]);
+        });
+        yAxis.push({
+          seriesName: 'Current (A)',
+          opposite: yAxis.length > 0,
+          show: true,
+          labels: {
+            style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' },
+            formatter: (val: number) => val.toFixed(2)
+          }
+        });
+      }
+    } else {
+      // Single series mode: either "combined" Total or specific device
+      let targetChart = chartData;
+      let powerLabel = "Power (W)";
+      let voltLabel = "Voltage (V)";
+      let currLabel = "Current (A)";
+
+      if (isAll) {
+        if (trendFilter === "combined") {
+          targetChart = chartData; // which is the calculated combinedPoints
+          powerLabel = "Total Power (W)";
+          voltLabel = "Rata-rata Tegangan (V)";
+          currLabel = "Total Arus (A)";
+        } else {
+          // specific device filter selected in Live Trend
+          targetChart = deviceChartsMap[trendFilter] || [];
+          const devName = devices.find(d => d.id === trendFilter)?.name || "Alat";
+          powerLabel = `${devName} Power (W)`;
+          voltLabel = `${devName} Voltage (V)`;
+          currLabel = `${devName} Current (A)`;
+        }
+      }
+
+      if (activeMetrics.power) {
+        series.push({ name: powerLabel, data: targetChart.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.power })) });
+        colors.push('#f59e0b');
+        yAxis.push({ seriesName: powerLabel, show: true, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (val: number) => val.toFixed(1) } });
+      }
+      if (activeMetrics.voltage) {
+        series.push({ name: voltLabel, data: targetChart.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.voltage })) });
+        colors.push('#3b82f6');
+        yAxis.push({ seriesName: voltLabel, opposite: yAxis.length > 0, show: true, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (val: number) => val.toFixed(1) } });
+      }
+      if (activeMetrics.current) {
+        series.push({ name: currLabel, data: targetChart.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.current })) });
+        colors.push('#ef4444');
+        yAxis.push({ seriesName: currLabel, opposite: yAxis.length > 0, show: true, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (val: number) => val.toFixed(2) } });
+      }
     }
-    if (activeMetrics.voltage) {
-      series.push({ name: "Voltage (V)", data: chartData.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.voltage })) });
-      colors.push('#3b82f6');
-      yAxis.push({ seriesName: 'Voltage (V)', opposite: yAxis.length > 0, show: true, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (val: number) => val.toFixed(1) } });
-    }
-    if (activeMetrics.current) {
-      series.push({ name: "Current (A)", data: chartData.map(d => ({ x: new Date(d.createdAt).getTime(), y: d.current })) });
-      colors.push('#ef4444');
-      yAxis.push({ seriesName: 'Current (A)', opposite: yAxis.length > 0, show: true, labels: { style: { colors: isDarkMode ? '#9ca3af' : '#6b7280' }, formatter: (val: number) => val.toFixed(2) } });
-    }
+
     if (yAxis.length === 0) yAxis.push({ show: false });
 
     return { powerTrendSeries: series, powerTrendColors: colors, powerTrendYAxis: yAxis };
-  }, [activeMetrics, chartData, isDarkMode]);
+  }, [activeMetrics, chartData, deviceChartsMap, trendFilter, selectedDeviceId, devices, isDarkMode]);
 
   const powerTrendOptions: ApexOptions = useMemo(() => ({
     chart: { 
@@ -1082,9 +1231,15 @@ const PowerDashboard: React.FC = () => {
       } 
     },
     stroke: { curve: 'smooth', width: 2 },
-    legend: { show: false },
+    legend: { 
+      show: selectedDeviceId === "all" && trendFilter === "multi",
+      position: 'top',
+      horizontalAlign: 'left',
+      labels: { colors: isDarkMode ? '#e5e7eb' : '#374151' },
+      itemMargin: { horizontal: 8, vertical: 4 }
+    },
     dataLabels: { enabled: false },
-    fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 100] } },
+    fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.05, stops: [0, 100] } },
     colors: powerTrendColors,
     grid: { borderColor: isDarkMode ? '#334155' : '#e2e8f0', strokeDashArray: 4 },
     xaxis: { type: 'datetime', labels: { show: false, datetimeUTC: false }, axisBorder: { show: false }, axisTicks: { show: false }, tooltip: { enabled: false } },
@@ -1097,14 +1252,20 @@ const PowerDashboard: React.FC = () => {
       x: { formatter: (val) => new Date(val).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) },
       y: { formatter: (val, { seriesIndex, w }) => {
         const name = w?.globals?.seriesNames?.[seriesIndex] || "";
-        if (name.includes('Power')) return val.toFixed(1) + " W";
-        if (name.includes('Voltage')) return val.toFixed(1) + " V";
-        if (name.includes('Current')) return val.toFixed(2) + " A";
+        if (name.includes('Power') || name.includes('(W)')) return val.toFixed(1) + " W";
+        if (name.includes('Voltage') || name.includes('(V)')) return val.toFixed(1) + " V";
+        if (name.includes('Current') || name.includes('(A)')) return val.toFixed(2) + " A";
         return val.toString();
       }}
     },
     theme: { mode: isDarkMode ? 'dark' : 'light' }
-  }), [isDarkMode, powerTrendColors, powerTrendYAxis]);
+  }), [isDarkMode, powerTrendColors, powerTrendYAxis, selectedDeviceId, trendFilter]);
+
+  const activeTrendChartData = useMemo(() => {
+    if (selectedDeviceId !== "all") return chartData;
+    if (trendFilter === "combined" || trendFilter === "multi") return chartData;
+    return deviceChartsMap[trendFilter] || chartData;
+  }, [selectedDeviceId, trendFilter, chartData, deviceChartsMap]);
 
   // Fullscreen Usage Options
   const fullscreenUsageOptions: ApexOptions = useMemo(() => ({
@@ -1218,17 +1379,50 @@ const PowerDashboard: React.FC = () => {
                     ))}
                   </div>
                 ) : (
-                  <div className="flex gap-1.5">
-                    {[["power","Power","yellow"],["voltage","Voltage","blue"],["current","Current","red"]].map(([key, label, col]) => (
-                      <button key={key} onClick={() => setActiveMetrics(p => ({ ...p, [key]: !p[key as keyof typeof p] }))}
-                        className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors border ${
-                          activeMetrics[key as keyof typeof activeMetrics]
-                            ? `bg-${col}-900/40 text-${col}-400 border-${col}-700`
-                            : "bg-transparent text-gray-500 border-gray-700"
-                        }`}>
-                        {label}
-                      </button>
-                    ))}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {selectedDeviceId === "all" && devices.length > 0 && (
+                      <div className="hidden md:flex items-center bg-gray-900/90 rounded-xl p-1 gap-1 border border-gray-800">
+                        <button
+                          onClick={() => setTrendFilter("combined")}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                            trendFilter === "combined" ? "bg-yellow-500 text-white" : "text-gray-400 hover:text-white"
+                          }`}
+                        >
+                          <FaBolt size={9} /> Total
+                        </button>
+                        <button
+                          onClick={() => setTrendFilter("multi")}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                            trendFilter === "multi" ? "bg-purple-600 text-white" : "text-gray-400 hover:text-white"
+                          }`}
+                        >
+                          <FaChartLine size={9} /> Pisah
+                        </button>
+                        {devices.map(dev => (
+                          <button
+                            key={dev.id}
+                            onClick={() => setTrendFilter(dev.id)}
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                              trendFilter === dev.id ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"
+                            }`}
+                          >
+                            <FaPlug size={9} /> {dev.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-1.5">
+                      {[["power","Power","yellow"],["voltage","Voltage","blue"],["current","Current","red"]].map(([key, label, col]) => (
+                        <button key={key} onClick={() => setActiveMetrics(p => ({ ...p, [key]: !p[key as keyof typeof p] }))}
+                          className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors border ${
+                            activeMetrics[key as keyof typeof activeMetrics]
+                              ? `bg-${col}-900/40 text-${col}-400 border-${col}-700`
+                              : "bg-transparent text-gray-500 border-gray-700"
+                          }`}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -1848,7 +2042,7 @@ const PowerDashboard: React.FC = () => {
                 </div>
                 <div className="flex-1 rounded-2xl bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 border border-violet-200 dark:border-violet-800/50 p-4 flex flex-col justify-between">
                   <span className="text-xs font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wide">Avg Power</span>
-                  <div><span className="text-3xl font-black text-violet-700 dark:text-violet-300">{chartData.length > 0 ? (chartData.reduce((s, d) => s + d.power, 0) / chartData.length).toFixed(1) : displayData.power.toFixed(1)}</span><span className="text-sm text-violet-500 ml-1">W</span></div>
+                  <div><span className="text-3xl font-black text-violet-700 dark:text-violet-300">{activeTrendChartData.length > 0 ? (activeTrendChartData.reduce((s, d) => s + d.power, 0) / activeTrendChartData.length).toFixed(1) : displayData.power.toFixed(1)}</span><span className="text-sm text-violet-500 ml-1">W</span></div>
                   <span className="text-xs text-violet-500">recent average</span>
                 </div>
               </div>
@@ -1888,6 +2082,51 @@ const PowerDashboard: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {/* Room Filter Pills in Combined View */}
+            {selectedDeviceId === "all" && devices.length > 0 && (
+              <div className="flex items-center bg-gray-100 dark:bg-gray-800/80 rounded-xl p-1 gap-1 mb-4 overflow-x-auto no-scrollbar relative z-10 w-fit max-w-full">
+                <button
+                  onClick={() => setTrendFilter("combined")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                    trendFilter === "combined"
+                      ? "bg-yellow-500 text-white shadow-sm"
+                      : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                  }`}
+                  title="Gabungkan total daya semua ruangan tanpa efek sisir/zig-zag"
+                >
+                  <FaBolt size={10} />
+                  <span>Total (Gabung)</span>
+                </button>
+                <button
+                  onClick={() => setTrendFilter("multi")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                    trendFilter === "multi"
+                      ? "bg-purple-600 text-white shadow-sm"
+                      : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                  }`}
+                  title="Grafik terpisah untuk setiap ruangan dalam 1 layar"
+                >
+                  <FaChartLine size={10} />
+                  <span>Pisah (Semua)</span>
+                </button>
+                {devices.map(dev => (
+                  <button
+                    key={dev.id}
+                    onClick={() => setTrendFilter(dev.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                      trendFilter === dev.id
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    <FaPlug size={10} />
+                    <span>{dev.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div 
               className="h-[200px] -mx-2 md:-mx-4 relative z-10"
               onMouseEnter={() => { isHoveringChart.current = true; }}
@@ -1897,12 +2136,32 @@ const PowerDashboard: React.FC = () => {
             </div>
             <div className="mt-6 space-y-4 relative z-10">
               <div className="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2">
-                <span className="text-gray-500 dark:text-gray-400 text-sm">Current Load</span>
-                <span className="font-bold text-lg">{displayData.power.toFixed(1)} W</span>
+                <span className="text-gray-500 dark:text-gray-400 text-sm">
+                  {selectedDeviceId === "all" && trendFilter !== "combined" && trendFilter !== "multi"
+                    ? `Current Load (${devices.find(d => d.id === trendFilter)?.name || "Alat"})`
+                    : "Current Load"}
+                </span>
+                <span className="font-bold text-lg">
+                  {(
+                    selectedDeviceId === "all" && trendFilter !== "combined" && trendFilter !== "multi"
+                      ? (allDevicesRealtimeMap[trendFilter]?.data?.power ?? 0)
+                      : displayData.power
+                  ).toFixed(1)} W
+                </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-500 dark:text-gray-400 text-sm">Status</span>
-                <span className={`font-bold text-sm px-2 py-1 rounded ${status === "ONLINE" ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400"}`}>{status}</span>
+                <span className={`font-bold text-sm px-2 py-1 rounded ${
+                  (selectedDeviceId === "all" && trendFilter !== "combined" && trendFilter !== "multi"
+                    ? (allDevicesRealtimeMap[trendFilter]?.isOnline ? "ONLINE" : "OFFLINE")
+                    : status) === "ONLINE"
+                    ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                    : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+                }`}>
+                  {selectedDeviceId === "all" && trendFilter !== "combined" && trendFilter !== "multi"
+                    ? (allDevicesRealtimeMap[trendFilter]?.isOnline ? "ONLINE" : "OFFLINE")
+                    : status}
+                </span>
               </div>
             </div>
           </motion.div>
