@@ -220,6 +220,7 @@ export default function HistoryALIN() {
       tooltip: {
         theme: "dark",
         shared: true,
+        intersect: false,
         y: { formatter: (v) => `${(v || 0).toFixed(4)} kWh` },
       },
     }),
