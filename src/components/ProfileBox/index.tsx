@@ -37,13 +37,10 @@ const formatDate = (dateString: string) => {
 };
 
 const ProfileBox: React.FC = async () => {
-  const API_URL = process.env.NEXT_PUBLIC_HTTPS_API_URL;
+  const API_URL = process.env.NEXT_PUBLIC_HTTPS_API_URL || "gardenapi.tierkun.my.id";
 
-  if (!API_URL) {
-    throw new Error("HTTPS_API_URL is not defined.");
-  }
-
-  const token = cookies().get("userAuth")?.value;
+  const cookieStore = await cookies();
+  const token = cookieStore.get("userAuth")?.value;
 
   if (!token) {
     return (

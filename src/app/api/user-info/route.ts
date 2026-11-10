@@ -1,12 +1,15 @@
-// src/app/api/profile/route.ts
+// src/app/api/user-info/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers"; // Gunakan next/headers untuk App Router
+import { cookies } from "next/headers";
 
-const HTTPSAPIURL = process.env.NEXT_PUBLIC_HTTPS_API_URL; // Gunakan HTTPS_API_URL, jangan NEXT_PUBLIC_*
+export const dynamic = "force-dynamic";
+
+const HTTPSAPIURL = process.env.NEXT_PUBLIC_HTTPS_API_URL || "gardenapi.tierkun.my.id";
 
 export async function GET(req: NextRequest) {
   try {
-    const token = cookies().get("userAuth")?.value; // Ambil token dari cookies
+    const cookieStore = await cookies();
+    const token = cookieStore.get("userAuth")?.value; // Ambil token dari cookies
     console.log("Token:", token);
 
     console.log(HTTPSAPIURL)

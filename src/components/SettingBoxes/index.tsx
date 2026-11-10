@@ -22,7 +22,7 @@ export interface UserData {
 }
 
 const SettingBoxesWrapper = async () => {
-  const API_URL = process.env.NEXT_PUBLIC_HTTPS_API_URL;
+  const API_URL = process.env.NEXT_PUBLIC_HTTPS_API_URL || "gardenapi.tierkun.my.id";
 
   // 1. Validasi Environment Variable
   if (!API_URL) {
@@ -35,7 +35,7 @@ const SettingBoxesWrapper = async () => {
   }
   
   // 2. Ambil Token
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const token = cookieStore.get("userAuth")?.value;
 
   // 3. Handle Unauthorized (Token Hilang)

@@ -15,7 +15,8 @@ import {
   MdOutlineManageAccounts,
   MdAccountCircle,
   MdSettingsSuggest,
-  MdChevronRight // Ikon panah baru
+  MdChevronRight,
+  MdElectricBolt
 } from "react-icons/md";
 import { FaHandshake, FaTools, FaLightbulb, FaBolt } from "react-icons/fa";
 import { TbDeviceAnalytics } from "react-icons/tb";
@@ -46,6 +47,7 @@ const menuGroups = [
       { icon: <MdSpaceDashboard size={22} />, label: "Home", route: "/dashboard", isAdmin: false },
       { icon: <FaLightbulb size={20} />, label: "Light Control", route: "/dashboard/light-control", isAdmin: false },
       { icon: <FaBolt size={20} />, label: "Power Monitor", route: "/dashboard/power", isAdmin: false },
+      { icon: <MdElectricBolt size={22} />, label: "Power ALIN (NILM)", route: "/dashboard/power-alin", isAdmin: false },
       // { icon: <GiWateringCan size={22} />, label: "Smart Watering", route: "/dashboard/smartwatering", isAdmin: true },
       { icon: <MdSettingsSuggest size={22} />, label: "Output Setting", route: "/dashboard/output", isAdmin: false },
       { icon: <MdDisplaySettings size={22} />, label: "PLC Setting", route: "/dashboard/plc-setting", isAdmin: false },

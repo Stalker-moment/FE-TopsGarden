@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
@@ -1539,6 +1540,14 @@ const PowerDashboard: React.FC = () => {
           </div>
           
           <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+            {/* Shortcut to Power-ALIN NILM Dashboard */}
+            <Link
+              href="/dashboard/power-alin"
+              className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold shadow-md hover:shadow-lg transition-all duration-200"
+            >
+              <MdElectricBolt size={16} className="text-amber-300" />
+              <span>Power-ALIN (NILM)</span>
+            </Link>
             {/* Server Battery Mini Card */}
             {serverBattery?.hasBattery && (
               <div className="flex items-center gap-2 bg-white dark:bg-gray-800 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
